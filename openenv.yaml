@@ -1,0 +1,9 @@
+name: clinical-triage-env
+version: "1.0.0"
+description: AI clinical triage simulation
+
+entrypoint: app.env:ClinicalTriageEnv
+
+observation_model: app.models:PatientObservation
+action_model: app.models:TriageAction
+reward_model: app.models:TriageReward
