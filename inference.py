@@ -10,13 +10,14 @@ from typing import List, Dict
 
 from app.env import ClinicalTriageEnv
 from app.models import TriageAction, FinalTriageAction, AskSymptomAction, OrderTestAction
+from app.tasks import TASKS
 
 client = OpenAI(
     base_url=os.getenv("API_BASE_URL"),
     api_key=os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 )
 
-MODEL = os.getenv("MODEL_NAME", "gpt-4o")
+MODEL = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
 BENCHMARK = "clinical-triage-env"
 
 env = ClinicalTriageEnv()
@@ -30,21 +31,36 @@ def extract_json(content: str):
 
 
 def get_agent_action(obs, history: List[Dict]) -> TriageAction:
+    available_symptoms = [
+        a.removeprefix("ask_symptom(").removesuffix(")")
+        for a in obs.available_actions if a.startswith("ask_symptom(")
+    ]
+    available_tests = [
+        a.removeprefix("order_test(").removesuffix(")")
+        for a in obs.available_actions if a.startswith("order_test(")
+    ]
+
     prompt = f"""
-You are a clinical triage assistant. Your goal is to accurately triage the patient while minimizing unnecessary steps.
+You are a clinical triage assistant. Triage the patient accurately with minimal steps.
 
-Available Actions:
-- {{"action_type": "ask_symptom", "symptom_name": "symptom_id"}} (Cost: 0.05)
-- {{"action_type": "order_test", "test_name": "test_id"}} (Cost: 0.10)
-- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": [], "confidence": 0-1}} (Ends episode)
+Available symptoms to ask about: {available_symptoms}
+Available tests to order: {available_tests}
 
-Patient Observation:
+Actions:
+- {{"action_type": "ask_symptom", "symptom_name": "<name from available symptoms list>"}} (Cost: 0.05)
+- {{"action_type": "order_test", "test_name": "<name from available tests list>"}} (Cost: 0.10)
+- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<relevant flags>"], "confidence": 0-1}}
+
+Urgency scale: 1=Critical(life-threatening), 2=Emergency, 3=Urgent, 4=Semi-urgent, 5=Non-urgent
+For critical_flags, include relevant observed symptoms/vitals (e.g. "chest_pain", "low_bp", "low_spo2", "tachycardia", "fever").
+
+Current Patient State:
 {obs.model_dump_json(indent=2)}
 
 Step History:
 {json.dumps(history, indent=2)}
 
-Decide your next action. Output ONLY valid JSON.
+Output ONLY valid JSON.
 """
     try:
         response = client.chat.completions.create(
@@ -56,6 +72,14 @@ Decide your next action. Output ONLY valid JSON.
         action_dict = extract_json(content)
 
         if not action_dict:
+            if step_count >= 5:
+                return FinalTriageAction(
+                    action_type="triage",
+                    urgency_level=3,
+                    care_pathway="ER",
+                    critical_flags=[],
+                    confidence=0.3
+                )
             return AskSymptomAction(symptom_name="none")
 
         if action_dict.get("action_type") == "triage":
@@ -66,55 +90,58 @@ Decide your next action. Output ONLY valid JSON.
             return OrderTestAction(**action_dict)
 
         return AskSymptomAction(symptom_name="none")
-    except Exception:
+    except Exception as e:
+        print(f"[WARN] get_agent_action error: {type(e).__name__}: {e}", file=sys.stderr)
         return AskSymptomAction(symptom_name="none")
 
 
 # --- Run tasks ---
 for task_id in tasks:
-    step_count = 0
-    history = []
-    reward = None
-    last_error = None
-    step_rewards = []
-    success = False
+    for case_id in TASKS[task_id]:
+        step_count = 0
+        history = []
+        reward = None
+        last_error = None
+        step_rewards = []
+        success = False
 
-    try:
-        obs = env.reset(task_id)
-        done = False
+        try:
+            obs = env.reset(task_id, case_id=case_id)
+            done = False
 
-        print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}")
+            print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}")
 
-        while not done and step_count < 10:
-            action = get_agent_action(obs, history)
-            action_str = json.dumps(action.model_dump(), separators=(',', ':'))
+            while not done and step_count < 10:
+                action = get_agent_action(obs, history)
+                action_str = json.dumps(action.model_dump(), separators=(',', ':'))
 
-            try:
-                obs, reward, done, info = env.step(action)
-                last_error = info.get("error", None) if info else None
-                r = reward.total
-            except Exception as e:
-                last_error = str(e)
-                r = 0.0
-                done = True
+                try:
+                    obs, reward, done, info = env.step(action)
+                    last_error = info.get("error", None) if info else None
+                    r = reward.total
+                except Exception as e:
+                    last_error = str(e)
+                    r = 0.0
+                    done = True
 
-            step_count += 1
-            step_rewards.append(r)
-            error_str = last_error if last_error else "null"
-            done_str = "true" if done else "false"
+                step_count += 1
+                step_rewards.append(r)
+                error_str = last_error if last_error else "null"
+                done_str = "true" if done else "false"
 
-            print(f"[STEP] step={step_count} action={action_str} reward={r:.2f} done={done_str} error={error_str}")
+                print(f"[STEP] step={step_count} action={action_str} reward={r:.2f} done={done_str} error={error_str}")
 
-            history.append({"step": step_count, "action": action.model_dump(), "reward": r})
+                history.append({"step": step_count, "action": action.model_dump(), "reward": r})
 
-        success = done and (reward.total > 0 if reward else False)
+            success = done and (reward.total > 0 if reward else False)
 
-    except Exception as e:
-        last_error = str(e)
-        print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}", file=sys.stderr)
+        except Exception as e:
+            last_error = str(e)
+            print(f"[ERROR] task={task_id} case={case_id}: {e}", file=sys.stderr)
 
-    finally:
-        rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
-        success_str = "true" if success else "false"
-        print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}")
-        env.close() if hasattr(env, 'close') else None
+        finally:
+            if hasattr(env, 'close'):
+                env.close()
+            rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
+            success_str = "true" if success else "false"
+            print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}")

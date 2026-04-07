@@ -15,12 +15,17 @@ class ClinicalTriageEnv:
         self.cumulative_cost = 0.0
         self.is_done = False
 
-    def reset(self, task_id: str) -> PatientObservation:
+    def reset(self, task_id: str, case_id: str = None) -> PatientObservation:
         case_ids = TASKS.get(task_id, [])
         if not case_ids:
             raise ValueError(f"Task ID {task_id} not found in TASKS.")
-        
-        case = random.choice([c for c in CASES if c["id"] in case_ids])
+
+        if case_id:
+            case = next((c for c in CASES if c["id"] == case_id), None)
+            if case is None:
+                raise ValueError(f"Case ID {case_id} not found in CASES.")
+        else:
+            case = random.choice([c for c in CASES if c["id"] in case_ids])
         self.current_case = case
         
         # Reset state
@@ -81,15 +86,15 @@ class ClinicalTriageEnv:
             presenting_complaint=c["presenting_complaint"],
             symptoms=self.revealed_symptoms,
             vitals=self.revealed_vitals,
-            history=[], # History starts hidden
+            history=c["history"],  # ← reveal history always, it's background context not a secret
             available_actions=self._get_available_actions(),
             data_completeness=c["completeness"]
         )
 
     def _get_available_actions(self) -> list:
-        # Potential symptoms and tests the agent could ask for
-        possible_symptoms = ["chest_pain", "shortness_of_breath", "fever", "cough", "nausea", "dizziness", "confusion"]
-        possible_tests = ["bp", "hr", "temp", "spo2"]
+        # Pull actual symptoms/vitals from the current case instead of hardcoding
+        possible_symptoms = self.current_case["symptoms"]
+        possible_tests = list(self.current_case["vitals"].keys())
         
         actions = [f"ask_symptom({s})" for s in possible_symptoms if s not in self.revealed_symptoms]
         actions += [f"order_test({t})" for t in possible_tests if t not in self.revealed_vitals]
