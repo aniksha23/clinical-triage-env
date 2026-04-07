@@ -63,11 +63,20 @@ Step History:
 Output ONLY valid JSON.
 """
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
+        import time
+        for attempt in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model=MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) and attempt < 2:
+                    time.sleep(2 ** attempt)  # 1s, 2s
+                    continue
+                raise
         content = response.choices[0].message.content
         action_dict = extract_json(content)
 
