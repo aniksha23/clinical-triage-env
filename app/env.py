@@ -47,23 +47,29 @@ class ClinicalTriageEnv:
 
         if action.action_type == "ask_symptom":
             symptom = action.symptom_name
-            # If valid symptom, reveal it (otherwise it stays hidden or null)
             if symptom in self.current_case["symptoms"]:
                 self.revealed_symptoms[symptom] = True
+                info_gain = 0.05  # relevant symptom revealed
             else:
                 self.revealed_symptoms[symptom] = False
-            
-            self.cumulative_cost += 0.05  # Cost for asking a symptom
-            reward = TriageReward(total=0.0, accuracy_score=0.0, cost_penalty=self.cumulative_cost, done=False, message=f"Asked about {symptom}")
+                info_gain = -0.02  # wasted step
+
+            self.cumulative_cost += 0.05
+            step_reward = max(0.0, info_gain - 0.05)  # net of cost
+            reward = TriageReward(total=step_reward, accuracy_score=0.0, cost_penalty=self.cumulative_cost, done=False, message=f"Asked about {symptom}")
             return self._get_obs(), reward, False, {}
 
         elif action.action_type == "order_test":
             test = action.test_name
             if test in self.current_case["vitals"]:
                 self.revealed_vitals[test] = self.current_case["vitals"][test]
-            
-            self.cumulative_cost += 0.1  # Cost for ordering a test
-            reward = TriageReward(total=0.0, accuracy_score=0.0, cost_penalty=self.cumulative_cost, done=False, message=f"Ordered test: {test}")
+                info_gain = 0.10  # useful test result
+            else:
+                info_gain = -0.05  # irrelevant test
+
+            self.cumulative_cost += 0.1
+            step_reward = max(0.0, info_gain - 0.10)  # net of cost
+            reward = TriageReward(total=step_reward, accuracy_score=0.0, cost_penalty=self.cumulative_cost, done=False, message=f"Ordered test: {test}")
             return self._get_obs(), reward, False, {}
 
         elif action.action_type == "triage":

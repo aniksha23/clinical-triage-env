@@ -1,0 +1,20 @@
+[project]
+name = "clinical-triage-env"
+version = "1.0.0"
+description = "AI clinical triage simulation environment for OpenEnv"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=2.0.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "openenv-core>=0.2.0",
+    "uvicorn>=0.30.0",
+    "fastapi>=0.110.0",
+]
+
+[project.scripts]
+server = "server.app:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends.legacy:build"
