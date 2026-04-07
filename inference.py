@@ -4,19 +4,20 @@ load_dotenv()
 import os
 import json
 import re
+import sys
 from openai import OpenAI
-from typing import List, Dict, Any
+from typing import List, Dict
 
 from app.env import ClinicalTriageEnv
 from app.models import TriageAction, FinalTriageAction, AskSymptomAction, OrderTestAction
 
-# --- Setup client ---
 client = OpenAI(
     base_url=os.getenv("API_BASE_URL"),
     api_key=os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 )
 
 MODEL = os.getenv("MODEL_NAME", "gpt-4o")
+BENCHMARK = "clinical-triage-env"
 
 env = ClinicalTriageEnv()
 tasks = ["easy_triage", "medium_triage", "hard_triage"]
@@ -43,7 +44,7 @@ Patient Observation:
 Step History:
 {json.dumps(history, indent=2)}
 
-Decide your next action. Output ONLY valid JSON of the action you wish to take.
+Decide your next action. Output ONLY valid JSON.
 """
     try:
         response = client.chat.completions.create(
@@ -53,61 +54,67 @@ Decide your next action. Output ONLY valid JSON of the action you wish to take.
         )
         content = response.choices[0].message.content
         action_dict = extract_json(content)
-        
-        if not action_dict:
-            return AskSymptomAction(symptom_name="none") # Fallback
 
-        # Basic normalization
+        if not action_dict:
+            return AskSymptomAction(symptom_name="none")
+
         if action_dict.get("action_type") == "triage":
             return FinalTriageAction(**action_dict)
         elif action_dict.get("action_type") == "ask_symptom":
             return AskSymptomAction(**action_dict)
         elif action_dict.get("action_type") == "order_test":
             return OrderTestAction(**action_dict)
-        
+
         return AskSymptomAction(symptom_name="none")
-    except Exception as e:
-        print(f"Error getting action: {e}")
+    except Exception:
         return AskSymptomAction(symptom_name="none")
 
 
 # --- Run tasks ---
-results = []
-
 for task_id in tasks:
-    obs = env.reset(task_id)
-    done = False
     step_count = 0
     history = []
-    
-    print(f"\n>>> Starting Task: {task_id}")
-    
-    while not done and step_count < 10:
-        action = get_agent_action(obs, history)
-        obs, reward, done, _ = env.step(action)
-        
-        step_info = {
-            "step": step_count,
-            "action": action.model_dump(),
-            "reward": reward.total,
-            "message": reward.message
-        }
-        history.append(step_info)
-        
-        print(json.dumps(step_info))
-        step_count += 1
+    reward = None
+    last_error = None
+    step_rewards = []
+    success = False
 
-    print(f"--- Task Ended: {task_id} | Final Reward: {reward.total:.2f} | Steps: {step_count}")
-    results.append({
-        "task_id": task_id,
-        "total_reward": reward.total,
-        "accuracy": reward.accuracy_score,
-        "cost": reward.cost_penalty,
-        "steps": step_count
-    })
+    try:
+        obs = env.reset(task_id)
+        done = False
 
-print("\n\n" + "="*30)
-print("FINAL EVALUATION RESULTS")
-print("="*30)
-for res in results:
-    print(f"{res['task_id']}: Reward={res['total_reward']:.2f} (Acc={res['accuracy']:.2f}, Cost={res['cost']:.2f})")
+        print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}")
+
+        while not done and step_count < 10:
+            action = get_agent_action(obs, history)
+            action_str = json.dumps(action.model_dump(), separators=(',', ':'))
+
+            try:
+                obs, reward, done, info = env.step(action)
+                last_error = info.get("error", None) if info else None
+                r = reward.total
+            except Exception as e:
+                last_error = str(e)
+                r = 0.0
+                done = True
+
+            step_count += 1
+            step_rewards.append(r)
+            error_str = last_error if last_error else "null"
+            done_str = "true" if done else "false"
+
+            print(f"[STEP] step={step_count} action={action_str} reward={r:.2f} done={done_str} error={error_str}")
+
+            history.append({"step": step_count, "action": action.model_dump(), "reward": r})
+
+        success = done and (reward.total > 0 if reward else False)
+
+    except Exception as e:
+        last_error = str(e)
+        print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}", file=sys.stderr)
+
+    finally:
+        rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
+        success_str = "true" if success else "false"
+        print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}")
+        env.close() if hasattr(env, 'close') else None
