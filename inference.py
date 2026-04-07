@@ -17,7 +17,7 @@ client = OpenAI(
     api_key=os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 )
 
-MODEL = os.getenv("MODEL_NAME", "llama3-8b-8192")
+MODEL = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 BENCHMARK = "clinical-triage-env"
 MAX_CASES = int(os.getenv("MAX_CASES", "5"))
 
