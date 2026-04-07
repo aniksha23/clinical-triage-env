@@ -5,152 +5,109 @@ import os
 import json
 import re
 from openai import OpenAI
+from typing import List, Dict, Any
 
 from app.env import ClinicalTriageEnv
-from app.models import TriageAction
+from app.models import TriageAction, FinalTriageAction, AskSymptomAction, OrderTestAction
 
 # --- Setup client ---
 client = OpenAI(
     base_url=os.getenv("API_BASE_URL"),
-    api_key=os.getenv("HF_TOKEN")
+    api_key=os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 )
 
-MODEL = os.getenv("MODEL_NAME")
+MODEL = os.getenv("MODEL_NAME", "gpt-4o")
 
 env = ClinicalTriageEnv()
-
 tasks = ["easy_triage", "medium_triage", "hard_triage"]
 
 
-# --- Robust JSON extractor ---
 def extract_json(content: str):
-    # Remove markdown formatting
     content = re.sub(r"```json|```", "", content).strip()
-
-    # Extract JSON object
     match = re.search(r"\{.*\}", content, re.DOTALL)
-    if not match:
-        return None
-
-    json_str = match.group(0)
-
-    try:
-        return json.loads(json_str)
-    except:
-        return None
+    return json.loads(match.group(0)) if match else None
 
 
-# --- Fallback action (never crash) ---
-def fallback_action():
-    return {
-        "urgency_level": 3,
-        "care_pathway": "GP",
-        "critical_flags": [],
-        "confidence": 0.5
-    }
-
-
-def normalize_action_dict(action_dict):
-    # normalize care_pathway
-    if "care_pathway" in action_dict:
-        pathway = action_dict["care_pathway"].lower().replace("-", "_").replace(" ", "_")
-
-        mapping = {
-            "er": "ER",
-            "urgent_care": "urgent_care",
-            "gp": "GP",
-            "self_care": "self_care"
-        }
-
-        action_dict["care_pathway"] = mapping.get(pathway, "GP")
-
-    # normalize critical_flags
-    if "critical_flags" in action_dict:
-        action_dict["critical_flags"] = [
-            f.lower().replace(" ", "_") for f in action_dict["critical_flags"]
-        ]
-
-    return action_dict
-
-
-# --- Run tasks ---
-for task_id in tasks:
-    obs = env.reset(task_id)
-
-    print(json.dumps({
-        "event": "START",
-        "task_id": task_id,
-        "model": MODEL
-    }))
-
+def get_agent_action(obs, history: List[Dict]) -> TriageAction:
     prompt = f"""
-You are a clinical triage assistant.
+You are a clinical triage assistant. Your goal is to accurately triage the patient while minimizing unnecessary steps.
 
-STRICT RULES:
-- Output ONLY valid JSON
-- No explanation
-- No markdown
-- No text outside JSON
+Available Actions:
+- {{"action_type": "ask_symptom", "symptom_name": "symptom_id"}} (Cost: 0.05)
+- {{"action_type": "order_test", "test_name": "test_id"}} (Cost: 0.10)
+- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": [], "confidence": 0-1}} (Ends episode)
 
-FORMAT:
-{{
-  "urgency_level": 1,
-  "care_pathway": "ER",
-  "critical_flags": ["example"],
-  "confidence": 0.5
-}}
+Patient Observation:
+{obs.model_dump_json(indent=2)}
 
-Patient:
-{obs.model_dump_json()}
+Step History:
+{json.dumps(history, indent=2)}
+
+Decide your next action. Output ONLY valid JSON of the action you wish to take.
 """
-
     try:
         response = client.chat.completions.create(
             model=MODEL,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
         )
-
         content = response.choices[0].message.content
-
-        # Debug (optional, can remove later)
-        print("RAW OUTPUT:", content)
-
         action_dict = extract_json(content)
+        
+        if not action_dict:
+            return AskSymptomAction(symptom_name="none") # Fallback
 
-        if action_dict is None:
-            print("⚠️ JSON parse failed → fallback")
-            action_dict = fallback_action()
-
+        # Basic normalization
+        if action_dict.get("action_type") == "triage":
+            return FinalTriageAction(**action_dict)
+        elif action_dict.get("action_type") == "ask_symptom":
+            return AskSymptomAction(**action_dict)
+        elif action_dict.get("action_type") == "order_test":
+            return OrderTestAction(**action_dict)
+        
+        return AskSymptomAction(symptom_name="none")
     except Exception as e:
-        print("⚠️ API error → fallback:", str(e))
-        action_dict = fallback_action()
+        print(f"Error getting action: {e}")
+        return AskSymptomAction(symptom_name="none")
 
-    # Ensure valid schema
-    action_dict = normalize_action_dict(action_dict or fallback_action())
+
+# --- Run tasks ---
+results = []
+
+for task_id in tasks:
+    obs = env.reset(task_id)
+    done = False
+    step_count = 0
+    history = []
     
-    try:
-        action = TriageAction(**action_dict)
-    except:
-        print("⚠️ Invalid schema → fallback")
-        action = TriageAction(**fallback_action())
+    print(f"\n>>> Starting Task: {task_id}")
+    
+    while not done and step_count < 10:
+        action = get_agent_action(obs, history)
+        obs, reward, done, _ = env.step(action)
+        
+        step_info = {
+            "step": step_count,
+            "action": action.model_dump(),
+            "reward": reward.total,
+            "message": reward.message
+        }
+        history.append(step_info)
+        
+        print(json.dumps(step_info))
+        step_count += 1
 
-    obs, reward, done, _ = env.step(action)
-
-    print(json.dumps({
-        "event": "STEP",
-        "step": 0,
-        "action": action.model_dump(),
-        "reward": reward.total,
-        "done": done
-    }))
-
-    print(json.dumps({
-        "event": "END",
+    print(f"--- Task Ended: {task_id} | Final Reward: {reward.total:.2f} | Steps: {step_count}")
+    results.append({
         "task_id": task_id,
         "total_reward": reward.total,
-        "scores": {
-            "urgency": reward.urgency_score,
-            "pathway": reward.pathway_score,
-            "flags": reward.flags_score
-        }
-    }))
+        "accuracy": reward.accuracy_score,
+        "cost": reward.cost_penalty,
+        "steps": step_count
+    })
+
+print("\n\n" + "="*30)
+print("FINAL EVALUATION RESULTS")
+print("="*30)
+for res in results:
+    print(f"{res['task_id']}: Reward={res['total_reward']:.2f} (Acc={res['accuracy']:.2f}, Cost={res['cost']:.2f})")
