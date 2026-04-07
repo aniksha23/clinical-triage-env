@@ -50,6 +50,29 @@ def fallback_action():
     }
 
 
+def normalize_action_dict(action_dict):
+    # normalize care_pathway
+    if "care_pathway" in action_dict:
+        pathway = action_dict["care_pathway"].lower().replace("-", "_").replace(" ", "_")
+
+        mapping = {
+            "er": "ER",
+            "urgent_care": "urgent_care",
+            "gp": "GP",
+            "self_care": "self_care"
+        }
+
+        action_dict["care_pathway"] = mapping.get(pathway, "GP")
+
+    # normalize critical_flags
+    if "critical_flags" in action_dict:
+        action_dict["critical_flags"] = [
+            f.lower().replace(" ", "_") for f in action_dict["critical_flags"]
+        ]
+
+    return action_dict
+
+
 # --- Run tasks ---
 for task_id in tasks:
     obs = env.reset(task_id)
@@ -103,6 +126,8 @@ Patient:
         action_dict = fallback_action()
 
     # Ensure valid schema
+    action_dict = normalize_action_dict(action_dict or fallback_action())
+    
     try:
         action = TriageAction(**action_dict)
     except:
