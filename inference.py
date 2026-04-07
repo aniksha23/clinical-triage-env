@@ -17,8 +17,9 @@ client = OpenAI(
     api_key=os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 )
 
-MODEL = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
+MODEL = os.getenv("MODEL_NAME", "llama3-8b-8192")
 BENCHMARK = "clinical-triage-env"
+MAX_CASES = int(os.getenv("MAX_CASES", "5"))
 
 env = ClinicalTriageEnv()
 tasks = ["easy_triage", "medium_triage", "hard_triage"]
@@ -105,8 +106,11 @@ Output ONLY valid JSON.
 
 
 # --- Run tasks ---
+cases_run = 0
 for task_id in tasks:
     for case_id in TASKS[task_id]:
+        if cases_run >= MAX_CASES:
+            break
         step_count = 0
         history = []
         reward = None
@@ -154,3 +158,6 @@ for task_id in tasks:
             rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
             success_str = "true" if success else "false"
             print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}")
+            cases_run += 1
+    if cases_run >= MAX_CASES:
+        break
