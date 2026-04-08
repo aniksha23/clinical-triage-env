@@ -56,7 +56,7 @@ class ClinicalTriageEnv:
 
             self.cumulative_cost += 0.05
             step_reward = 0.002 if symptom in self.current_case["symptoms"] else 0.001
-            reward = TriageReward(total=step_reward, accuracy_score=0.001, cost_penalty=max(0.001, self.cumulative_cost), done=False, message=f"Asked about {symptom}")
+            reward = TriageReward(total=step_reward, accuracy_score=0.001, cost_penalty=max(0.001, min(0.999, self.cumulative_cost)), done=False, message=f"Asked about {symptom}")
             return self._get_obs(), reward, False, {"grader_score": step_reward}
 
         elif action.action_type == "order_test":
@@ -66,7 +66,7 @@ class ClinicalTriageEnv:
 
             self.cumulative_cost += 0.1
             step_reward = 0.003 if test in self.current_case["vitals"] else 0.001
-            reward = TriageReward(total=step_reward, accuracy_score=0.001, cost_penalty=max(0.001, self.cumulative_cost), done=False, message=f"Ordered test: {test}")
+            reward = TriageReward(total=step_reward, accuracy_score=0.001, cost_penalty=max(0.001, min(0.999, self.cumulative_cost)), done=False, message=f"Ordered test: {test}")
             return self._get_obs(), reward, False, {"grader_score": step_reward}
 
         elif action.action_type == "triage":
