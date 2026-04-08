@@ -131,10 +131,12 @@ for task_id in tasks:
                 try:
                     obs, reward, done, info = env.step(action)
                     last_error = info.get("error", None) if info else None
-                    r = reward.total
-                except Exception as e:
-                    last_error = str(e)
-                    r = 0.0
+                    # User-provided clamping and metadata logic
+                    r = info.get("grader_score", 0.01) or 0.01
+                    r = max(0.001, min(0.999, r))
+                except Exception as exc:
+                    print(f"[DEBUG] Task {task_id} error: {exc}", flush=True)
+                    r = 0.001  # never exactly 0
                     done = True
 
                 step_count += 1
@@ -142,7 +144,7 @@ for task_id in tasks:
                 error_str = last_error if last_error else "null"
                 done_str = "true" if done else "false"
 
-                print(f"[STEP] step={step_count} action={action_str} reward={r:.2f} done={done_str} error={error_str}")
+                print(f"[STEP] step={step_count} action={action_str} reward={r:.4f} done={done_str} error={error_str}")
 
                 history.append({"step": step_count, "action": action.model_dump(), "reward": r})
 
@@ -155,7 +157,7 @@ for task_id in tasks:
         finally:
             if hasattr(env, 'close'):
                 env.close()
-            rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
+            rewards_str = ",".join(f"{r:.4f}" for r in step_rewards)
             success_str = "true" if success else "false"
             print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}")
             cases_run += 1

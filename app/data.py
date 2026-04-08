@@ -8,7 +8,7 @@ CASES = [
         "vitals": {"bp": "90/60", "hr": 112, "temp": 37.1, "spo2": 94},
         "history": ["diabetes"],
         "presenting_complaint": "Severe chest pain for 30 minutes",
-        "completeness": 1.0,
+        "completeness": 0.99,
         "gold": {
             "urgency": 1,
             "pathway": "ER",
@@ -22,7 +22,7 @@ CASES = [
         "vitals": {"temp": 38.2, "hr": 88, "spo2": 98},
         "history": [],
         "presenting_complaint": "Fever for 2 days",
-        "completeness": 1.0,
+        "completeness": 0.99,
         "gold": {
             "urgency": 4,
             "pathway": "GP",
@@ -36,7 +36,7 @@ CASES = [
         "vitals": {"temp": 37.5, "hr": 80, "spo2": 99},
         "history": [],
         "presenting_complaint": "Cold symptoms",
-        "completeness": 1.0,
+        "completeness": 0.99,
         "gold": {
             "urgency": 5,
             "pathway": "self_care",
@@ -52,7 +52,7 @@ CASES = [
         "vitals": {"bp": "110/70", "hr": 100, "spo2": 89},
         "history": ["hypertension"],
         "presenting_complaint": "Breathlessness",
-        "completeness": 1.0,
+        "completeness": 0.99,
         "gold": {
             "urgency": 2,
             "pathway": "ER",
@@ -66,7 +66,7 @@ CASES = [
         "vitals": {"bp": "120/80", "hr": 95, "temp": 37.8},
         "history": [],
         "presenting_complaint": "Stomach pain",
-        "completeness": 1.0,
+        "completeness": 0.99,
         "gold": {
             "urgency": 3,
             "pathway": "urgent_care",
