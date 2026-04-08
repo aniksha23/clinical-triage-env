@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r requirements-inference.txt
 # Copy app code
 COPY app/ ./app/
 COPY inference.py .
+COPY main.py .
 COPY openenv.yaml .
 
-CMD ["python", "inference.py"]
+EXPOSE 7860
+CMD ["python", "main.py"]
