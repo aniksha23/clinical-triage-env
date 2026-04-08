@@ -13,8 +13,8 @@ from app.models import TriageAction, FinalTriageAction, AskSymptomAction, OrderT
 from app.tasks import TASKS
 
 client = OpenAI(
-    base_url=os.getenv("API_BASE_URL"),
-    api_key=os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
+    base_url=os.environ.get("API_BASE_URL"),
+    api_key=os.environ.get("API_KEY")
 )
 
 MODEL = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
@@ -31,7 +31,7 @@ def extract_json(content: str):
     return json.loads(match.group(0)) if match else None
 
 
-def get_agent_action(obs, history: List[Dict]) -> TriageAction:
+def get_agent_action(obs, history: List[Dict], step_count: int) -> TriageAction:
     available_symptoms = [
         a.removeprefix("ask_symptom(").removesuffix(")")
         for a in obs.available_actions if a.startswith("ask_symptom(")
@@ -116,25 +116,27 @@ for task_id in tasks:
         reward = None
         last_error = None
         step_rewards = []
-        success = False
+        final_score = 0.001  # floor — never exactly 0
 
         try:
             obs = env.reset(task_id, case_id=case_id)
             done = False
 
-            print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}")
+            print(f"[START] task={task_id} env={BENCHMARK} model={MODEL}", flush=True)
 
             while not done and step_count < 10:
-                action = get_agent_action(obs, history)
+                action = get_agent_action(obs, history, step_count)
                 action_str = json.dumps(action.model_dump(), separators=(',', ':'))
 
                 try:
                     obs, reward, done, info = env.step(action)
                     last_error = info.get("error", None) if info else None
-                    r = reward.total
+                    r = max(0.001, min(0.999, reward.total))
+                    if done:
+                        final_score = r
                 except Exception as e:
                     last_error = str(e)
-                    r = 0.0
+                    r = 0.001  # never exactly 0
                     done = True
 
                 step_count += 1
@@ -142,22 +144,21 @@ for task_id in tasks:
                 error_str = last_error if last_error else "null"
                 done_str = "true" if done else "false"
 
-                print(f"[STEP] step={step_count} action={action_str} reward={r:.2f} done={done_str} error={error_str}")
+                print(f"[STEP] step={step_count} action={action_str} reward={r:.3f} done={done_str} error={error_str}", flush=True)
 
                 history.append({"step": step_count, "action": action.model_dump(), "reward": r})
 
-            success = done and (reward.total > 0 if reward else False)
-
         except Exception as e:
             last_error = str(e)
-            print(f"[ERROR] task={task_id} case={case_id}: {e}", file=sys.stderr)
+            final_score = 0.001  # floor so crashed task never emits score=0.000
+            print(f"[DEBUG] Task {task_id} error: {e}", file=sys.stderr, flush=True)
 
         finally:
             if hasattr(env, 'close'):
                 env.close()
-            rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
-            success_str = "true" if success else "false"
-            print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}")
+            rewards_str = ",".join(f"{r:.3f}" for r in step_rewards)
+            success_str = "true" if (reward and reward.total > 0 and done) else "false"
+            print(f"[END] task={task_id} success={success_str} steps={step_count} score={final_score:.3f} rewards={rewards_str}", flush=True)
             cases_run += 1
     if cases_run >= MAX_CASES:
         break
