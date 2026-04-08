@@ -50,7 +50,7 @@ Available tests to order: {available_tests}
 Actions:
 - {{"action_type": "ask_symptom", "symptom_name": "<name from available symptoms list>"}} (Cost: 0.05)
 - {{"action_type": "order_test", "test_name": "<name from available tests list>"}} (Cost: 0.10)
-- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<relevant flags>"], "confidence": 0-1}}
+- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<relevant flags>"], "confidence": 0.001-0.999}}
 
 Urgency scale: 1=Critical(life-threatening), 2=Emergency, 3=Urgent, 4=Semi-urgent, 5=Non-urgent
 For critical_flags, include relevant observed symptoms/vitals (e.g. "chest_pain", "low_bp", "low_spo2", "tachycardia", "fever").
@@ -116,7 +116,7 @@ for task_id in tasks:
         reward = None
         last_error = None
         step_rewards = []
-        final_score = 0.001  # floor — never exactly 0
+        final_score = 0.005  # floor — never exactly 0
 
         try:
             obs = env.reset(task_id, case_id=case_id)
@@ -131,12 +131,12 @@ for task_id in tasks:
                 try:
                     obs, reward, done, info = env.step(action)
                     last_error = info.get("error", None) if info else None
-                    r = max(0.001, min(0.999, reward.total))
+                    r = max(0.005, min(0.995, reward.total))
                     if done:
                         final_score = r
                 except Exception as e:
                     last_error = str(e)
-                    r = 0.001  # never exactly 0
+                    r = 0.005  # never exactly 0
                     done = True
 
                 step_count += 1
@@ -150,13 +150,13 @@ for task_id in tasks:
 
         except Exception as e:
             last_error = str(e)
-            final_score = 0.001  # floor so crashed task never emits score=0.000
+            final_score = 0.005  # floor so crashed task never emits score=0.000
             print(f"[DEBUG] Task {task_id} error: {e}", file=sys.stderr, flush=True)
 
         finally:
             if hasattr(env, 'close'):
                 env.close()
             rewards_str = ",".join(f"{r:.3f}" for r in step_rewards)
-            success_str = "true" if (reward and reward.total > 0 and done) else "false"
-            print(f"[END] task={task_id} success={success_str} steps={step_count} score={final_score:.3f} rewards={rewards_str}", flush=True)
+            success_val = 0.995 if (reward and reward.total > 0 and done) else 0.005
+            print(f"[END] task={task_id} success={success_val:.3f} steps={step_count} score={final_score:.3f} rewards={rewards_str}", flush=True)
             cases_in_task += 1

@@ -10,7 +10,7 @@ class PatientObservation(BaseModel):
     vitals: Dict[str, float | str] = Field(default_factory=dict)
     history: List[str] = Field(default_factory=list)
     available_actions: List[str] = Field(default_factory=list)
-    data_completeness: float = Field(default=0.01, ge=0.0, le=1.0)
+    data_completeness: float = Field(default=0.005, gt=0.0, lt=1.0)
 
 
 class AskSymptomAction(BaseModel):
@@ -28,7 +28,7 @@ class FinalTriageAction(BaseModel):
     urgency_level: Literal[1, 2, 3, 4, 5]
     care_pathway: Literal["ER", "urgent_care", "GP", "self_care"]
     critical_flags: List[str] = Field(default_factory=list)
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.5, gt=0.0, lt=1.0)
     reasoning: Optional[str] = None
 
 
@@ -40,7 +40,7 @@ TriageAction = Annotated[
 
 class TriageReward(BaseModel):
     total: float
-    accuracy_score: float = 0.01
-    cost_penalty: float = 0.01
+    accuracy_score: float = 0.005
+    cost_penalty: float = 0.005
     done: bool = False
     message: str = ""
