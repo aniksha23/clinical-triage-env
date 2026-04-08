@@ -57,6 +57,7 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
 
     # Accuracy (weighted average)
     accuracy_score = 0.4 * urgency_score + 0.35 * pathway_score + 0.25 * flags_score
+    accuracy_score = max(0.01, min(0.99, accuracy_score))
 
     # Total score (Accuracy - Costs), clamped strictly to (0, 1)
     total = accuracy_score - cost_penalty

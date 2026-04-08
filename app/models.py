@@ -40,7 +40,7 @@ TriageAction = Annotated[
 
 class TriageReward(BaseModel):
     total: float
-    accuracy_score: float = 0.0
-    cost_penalty: float = 0.0
+    accuracy_score: float = 0.01
+    cost_penalty: float = 0.01
     done: bool = False
     message: str = ""
