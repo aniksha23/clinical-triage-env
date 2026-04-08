@@ -5,8 +5,8 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Install deps first (cached layer unless requirements.txt changes)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-inference.txt .
+RUN pip install --no-cache-dir -r requirements-inference.txt
 
 # Copy app code
 COPY app/ ./app/
