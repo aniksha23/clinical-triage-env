@@ -8,3 +8,27 @@ observation_model: app.models:PatientObservation
 action_model: app.models:TriageAction
 reward_model: app.models:TriageReward
 
+tasks:
+  - id: easy_triage
+    description: Clear-cut presentations with complete patient data
+    difficulty: easy
+    grader:
+      type: programmatic
+      module: app.grader
+      function: compute_reward
+
+  - id: medium_triage
+    description: Partial data requiring 1-2 information gathering steps
+    difficulty: medium
+    grader:
+      type: programmatic
+      module: app.grader
+      function: compute_reward
+
+  - id: hard_triage
+    description: Incomplete data with ambiguous presentations
+    difficulty: hard
+    grader:
+      type: programmatic
+      module: app.grader
+      function: compute_reward
