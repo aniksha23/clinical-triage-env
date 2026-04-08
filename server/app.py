@@ -58,7 +58,7 @@ def step(req: StepRequest):
         obs, reward, done, info = env.step(action)
         return {
             "observation": obs.model_dump(),
-            "reward": reward.model_dump(),
+            "reward": reward,  # This is now a float
             "done": done,
             "info": info,
         }

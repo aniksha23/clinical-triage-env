@@ -41,7 +41,7 @@ class ClinicalTriageEnv:
         
         return self._get_obs()
 
-    def step(self, action: TriageAction) -> Tuple[PatientObservation, TriageReward, bool, Dict[str, Any]]:
+    def step(self, action: TriageAction) -> Tuple[PatientObservation, float, bool, Dict[str, Any]]:
         if self.is_done:
             raise RuntimeError("Episode is already done. Call reset().")
 
@@ -57,7 +57,7 @@ class ClinicalTriageEnv:
             self.cumulative_cost += 0.05
             step_reward = 0.002 if symptom in self.current_case["symptoms"] else 0.001
             reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Asked about {symptom}")
-            return self._get_obs(), reward, False, {"grader_score": step_reward}
+            return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "order_test":
             test = action.test_name
@@ -67,12 +67,12 @@ class ClinicalTriageEnv:
             self.cumulative_cost += 0.1
             step_reward = 0.003 if test in self.current_case["vitals"] else 0.001
             reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Ordered test: {test}")
-            return self._get_obs(), reward, False, {"grader_score": step_reward}
+            return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "triage":
             reward = compute_reward(action, self.current_case["gold"], self.cumulative_cost)
             self.is_done = True
-            return self._get_obs(), reward, True, {"grader_score": reward.total}
+            return self._get_obs(), reward.total, True, {"grader_score": reward.total, "detailed_reward": reward.model_dump()}
 
         else:
             raise ValueError(f"Unknown action type: {action.action_type}")

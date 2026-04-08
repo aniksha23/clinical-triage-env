@@ -131,7 +131,7 @@ for task_id in tasks:
                 try:
                     obs, reward, done, info = env.step(action)
                     last_error = info.get("error", None) if info else None
-                    r = max(0.005, min(0.995, reward.total))
+                    r = max(0.005, min(0.995, reward))
                     if done:
                         final_score = r
                 except Exception as e:
@@ -157,6 +157,6 @@ for task_id in tasks:
             if hasattr(env, 'close'):
                 env.close()
             rewards_str = ",".join(f"{r:.3f}" for r in step_rewards)
-            success_val = 0.995 if (reward and reward.total > 0 and done) else 0.005
+            success_val = 0.995 if (reward is not None and reward > 0 and done) else 0.005
             print(f"[END] task={task_id} success={success_val:.3f} steps={step_count} score={final_score:.3f} rewards={rewards_str}", flush=True)
             cases_in_task += 1
