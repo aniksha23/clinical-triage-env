@@ -19,7 +19,7 @@ client = OpenAI(
 
 MODEL = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 BENCHMARK = "clinical-triage-env"
-MAX_CASES = int(os.getenv("MAX_CASES", "5"))
+MAX_CASES_PER_TASK = int(os.getenv("MAX_CASES", "2"))  # per task, not global
 
 env = ClinicalTriageEnv()
 tasks = ["easy_triage", "medium_triage", "hard_triage"]
@@ -105,11 +105,11 @@ Output ONLY valid JSON.
         return AskSymptomAction(symptom_name="none")
 
 
-# --- Run tasks ---
-cases_run = 0
+# --- Run tasks --- (MAX_CASES_PER_TASK cases per task, so all 3 tasks always get output)
 for task_id in tasks:
+    cases_in_task = 0
     for case_id in TASKS[task_id]:
-        if cases_run >= MAX_CASES:
+        if cases_in_task >= MAX_CASES_PER_TASK:
             break
         step_count = 0
         history = []
@@ -159,6 +159,4 @@ for task_id in tasks:
             rewards_str = ",".join(f"{r:.3f}" for r in step_rewards)
             success_str = "true" if (reward and reward.total > 0 and done) else "false"
             print(f"[END] task={task_id} success={success_str} steps={step_count} score={final_score:.3f} rewards={rewards_str}", flush=True)
-            cases_run += 1
-    if cases_run >= MAX_CASES:
-        break
+            cases_in_task += 1
