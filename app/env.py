@@ -55,7 +55,7 @@ class ClinicalTriageEnv:
                 info_gain = -0.02  # wasted step
 
             self.cumulative_cost += 0.05
-            step_reward = max(0.0, info_gain - 0.05)  # net of cost
+            step_reward = 0.1 if symptom in self.current_case["symptoms"] else 0.02
             reward = TriageReward(total=step_reward, accuracy_score=0.0, cost_penalty=self.cumulative_cost, done=False, message=f"Asked about {symptom}")
             return self._get_obs(), reward, False, {}
 
@@ -63,12 +63,9 @@ class ClinicalTriageEnv:
             test = action.test_name
             if test in self.current_case["vitals"]:
                 self.revealed_vitals[test] = self.current_case["vitals"][test]
-                info_gain = 0.10  # useful test result
-            else:
-                info_gain = -0.05  # irrelevant test
 
             self.cumulative_cost += 0.1
-            step_reward = max(0.0, info_gain - 0.10)  # net of cost
+            step_reward = 0.15 if test in self.current_case["vitals"] else 0.02
             reward = TriageReward(total=step_reward, accuracy_score=0.0, cost_penalty=self.cumulative_cost, done=False, message=f"Ordered test: {test}")
             return self._get_obs(), reward, False, {}
 
