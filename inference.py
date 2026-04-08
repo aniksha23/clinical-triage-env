@@ -32,11 +32,7 @@ def extract_json(content: str):
 
 
 def get_agent_action(obs, history: List[Dict], step_count: int) -> TriageAction:
-    available_symptoms = [
-        a.removeprefix("ask_symptom(").removesuffix(")")
-        for a in obs.available_actions if a.startswith("ask_symptom(")
-    ]
-    available_tests = [
+    unrevealed_tests = [
         a.removeprefix("order_test(").removesuffix(")")
         for a in obs.available_actions if a.startswith("order_test(")
     ]
@@ -44,24 +40,25 @@ def get_agent_action(obs, history: List[Dict], step_count: int) -> TriageAction:
     prompt = f"""
 You are a clinical triage assistant. Triage the patient accurately with minimal steps.
 
-Available symptoms to ask about: {available_symptoms}
-Available tests to order: {available_tests}
-
-Actions:
-- {{"action_type": "ask_symptom", "symptom_name": "<name from available symptoms list>"}} (Cost: 0.05)
-- {{"action_type": "order_test", "test_name": "<name from available tests list>"}} (Cost: 0.10)
-- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<relevant flags>"], "confidence": 0.001-0.999}}
-
-Urgency scale: 1=Critical(life-threatening), 2=Emergency, 3=Urgent, 4=Semi-urgent, 5=Non-urgent
-For critical_flags, include relevant observed symptoms/vitals (e.g. "chest_pain", "low_bp", "low_spo2", "tachycardia", "fever").
-
 Current Patient State:
 {obs.model_dump_json(indent=2)}
 
 Step History:
 {json.dumps(history, indent=2)}
 
-Output ONLY valid JSON.
+Available Actions (choose exactly one):
+- {{"action_type": "ask_symptom", "symptom_name": "<any clinically relevant symptom you want to probe>"}} (Cost: 0.05)
+- {{"action_type": "order_test", "test_name": "<one of: {unrevealed_tests}>"}} (Cost: 0.10)
+- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<flags>"], "confidence": 0.0-1.0}}
+
+Rules:
+- For ask_symptom: choose symptoms based on clinical reasoning — you are NOT given a list, use your medical knowledge
+- For order_test: you MUST use one of the exact test names listed above
+- Urgency: 1=Critical, 2=Emergency, 3=Urgent, 4=Semi-urgent, 5=Non-urgent
+- critical_flags examples: "chest_pain", "low_bp", "low_spo2", "tachycardia", "fever", "confusion"
+- Stop gathering info and triage once you have enough to decide confidently
+
+Output ONLY valid JSON, nothing else.
 """
     try:
         import time

@@ -105,11 +105,11 @@ class ClinicalTriageEnv:
         )
 
     def _get_available_actions(self) -> list:
-        # Pull actual symptoms/vitals from the current case instead of hardcoding
-        possible_symptoms = self.current_case["symptoms"]
-        possible_tests = list(self.current_case["vitals"].keys())
-        
-        actions = [f"ask_symptom({s})" for s in possible_symptoms if s not in self.revealed_symptoms]
-        actions += [f"order_test({t})" for t in possible_tests if t not in self.revealed_vitals]
+        # Don't reveal which symptoms the case has — agent must reason clinically
+        unrevealed_tests = [t for t in self.current_case["vitals"].keys()
+                            if t not in self.revealed_vitals]
+
+        actions = ["ask_symptom(<symptom_name>)"]  # agent decides what to ask
+        actions += [f"order_test({t})" for t in unrevealed_tests]  # tests are a fixed catalogue
         actions += ["triage"]
         return actions
