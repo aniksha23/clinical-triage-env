@@ -1,30 +1,48 @@
+import difflib
 from app.models import TriageReward, FinalTriageAction
+
+# All valid canonical flag names — fuzzy matching snaps to these
+CANONICAL_FLAGS = {
+    "chest_pain", "low_bp", "high_bp", "tachycardia", "low_spo2",
+    "shortness_of_breath", "breathing_issue", "confusion", "weakness",
+    "fever", "cough", "sore_throat", "lethargy", "neck_stiffness",
+    "abdominal_pain", "dizziness", "rash", "numbness", "dehydration",
+    "vomiting", "palpitations", "fatigue", "headache", "back_pain",
+}
+
+ALIASES = {
+    "low bp": "low_bp",
+    "bp_low": "low_bp",
+    "high bp": "high_bp",
+    "high heart rate": "tachycardia",
+    "high hr": "tachycardia",
+    "low spo2": "low_spo2",
+    "shortness of breath": "shortness_of_breath",
+    "severe_chest_pain": "chest_pain",
+    "cardiac": "chest_pain",
+    "heart_pain": "chest_pain",
+    "hypotension": "low_bp",
+    "respiratory": "breathing_issue",
+    "fast_heart_rate": "tachycardia",
+    "rapid_heart_rate": "tachycardia",
+    "sob": "shortness_of_breath",
+    "dyspnea": "shortness_of_breath",
+    "syncope": "weakness",
+    "diaphoresis": "chest_pain",  # context: usually accompanies chest pain
+}
 
 
 def normalize_flags(flags):
-    mapping = {
-        "low bp": "low_bp",
-        "bp_low": "low_bp",
-        "high bp": "high_bp",
-        "high heart rate": "tachycardia",
-        "high hr": "tachycardia",
-        "low spo2": "low_spo2",
-        "shortness of breath": "shortness_of_breath",
-        "severe_chest_pain": "chest_pain",
-        "cardiac": "chest_pain",
-        "heart_pain": "chest_pain",
-        "hypotension": "low_bp",
-        "respiratory": "breathing_issue",
-        "confusion": "confusion",
-        "weakness": "weakness",
-        "fever": "fever",
-        "cough": "cough",
-        "sore_throat": "sore_throat"
-    }
     normalized = set()
     for f in flags:
         f = f.lower().strip().replace(" ", "_")
-        f = mapping.get(f, f)
+        # 1. Try explicit alias map
+        f = ALIASES.get(f, f)
+        # 2. If still not canonical, try fuzzy match (cutoff 0.75 avoids false positives)
+        if f not in CANONICAL_FLAGS:
+            matches = difflib.get_close_matches(f, CANONICAL_FLAGS, n=1, cutoff=0.75)
+            if matches:
+                f = matches[0]
         normalized.add(f)
     return normalized
 

@@ -47,12 +47,18 @@ class ClinicalTriageEnv:
 
         if action.action_type == "ask_symptom":
             symptom = action.symptom_name
+
+            # Duplicate ask: still charge cost, but no info gain
+            if symptom in self.revealed_symptoms:
+                self.cumulative_cost += 0.05
+                step_reward = 0.001
+                reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Already asked about {symptom}")
+                return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
+
             if symptom in self.current_case["symptoms"]:
                 self.revealed_symptoms[symptom] = True
-                info_gain = 0.05  # relevant symptom revealed
             else:
                 self.revealed_symptoms[symptom] = False
-                info_gain = -0.02  # wasted step
 
             self.cumulative_cost += 0.05
             step_reward = 0.002 if symptom in self.current_case["symptoms"] else 0.001
@@ -83,15 +89,19 @@ class ClinicalTriageEnv:
 
     def _get_obs(self) -> PatientObservation:
         c = self.current_case
+        total_fields = len(c["symptoms"]) + len(c["vitals"])
+        revealed_fields = len(self.revealed_symptoms) + len(self.revealed_vitals)
+        # Clamp away from 0.0 and 1.0 so it's always strictly in (0, 1)
+        completeness = max(0.01, min(0.99, revealed_fields / total_fields)) if total_fields > 0 else 0.01
         return PatientObservation(
             patient_id=c["id"],
             age=c["age"],
             presenting_complaint=c["presenting_complaint"],
             symptoms=self.revealed_symptoms,
             vitals=self.revealed_vitals,
-            history=c["history"],  # ← reveal history always, it's background context not a secret
+            history=c["history"],
             available_actions=self._get_available_actions(),
-            data_completeness=max(0.005, min(0.995, c["completeness"]))
+            data_completeness=completeness
         )
 
     def _get_available_actions(self) -> list:
