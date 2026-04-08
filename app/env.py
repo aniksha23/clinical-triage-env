@@ -55,9 +55,9 @@ class ClinicalTriageEnv:
                 info_gain = -0.02  # wasted step
 
             self.cumulative_cost += 0.05
-            step_reward = 0.1 if symptom in self.current_case["symptoms"] else 0.02
-            reward = TriageReward(total=step_reward, accuracy_score=0.01, cost_penalty=max(0.01, self.cumulative_cost), done=False, message=f"Asked about {symptom}")
-            return self._get_obs(), reward, False, {}
+            step_reward = 0.002 if symptom in self.current_case["symptoms"] else 0.001
+            reward = TriageReward(total=step_reward, accuracy_score=0.001, cost_penalty=max(0.001, self.cumulative_cost), done=False, message=f"Asked about {symptom}")
+            return self._get_obs(), reward, False, {"grader_score": step_reward}
 
         elif action.action_type == "order_test":
             test = action.test_name
@@ -65,14 +65,14 @@ class ClinicalTriageEnv:
                 self.revealed_vitals[test] = self.current_case["vitals"][test]
 
             self.cumulative_cost += 0.1
-            step_reward = 0.15 if test in self.current_case["vitals"] else 0.02
-            reward = TriageReward(total=step_reward, accuracy_score=0.01, cost_penalty=max(0.01, self.cumulative_cost), done=False, message=f"Ordered test: {test}")
-            return self._get_obs(), reward, False, {}
+            step_reward = 0.003 if test in self.current_case["vitals"] else 0.001
+            reward = TriageReward(total=step_reward, accuracy_score=0.001, cost_penalty=max(0.001, self.cumulative_cost), done=False, message=f"Ordered test: {test}")
+            return self._get_obs(), reward, False, {"grader_score": step_reward}
 
         elif action.action_type == "triage":
             reward = compute_reward(action, self.current_case["gold"], self.cumulative_cost)
             self.is_done = True
-            return self._get_obs(), reward, True, {}
+            return self._get_obs(), reward, True, {"grader_score": reward.total}
 
         else:
             raise ValueError(f"Unknown action type: {action.action_type}")
@@ -91,7 +91,7 @@ class ClinicalTriageEnv:
             vitals=self.revealed_vitals,
             history=c["history"],  # ← reveal history always, it's background context not a secret
             available_actions=self._get_available_actions(),
-            data_completeness=c["completeness"]
+            data_completeness=max(0.001, min(0.999, c["completeness"]))
         )
 
     def _get_available_actions(self) -> list:

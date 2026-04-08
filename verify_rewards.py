@@ -47,9 +47,11 @@ obs = env.reset("easy_triage")
 action_ask = AskSymptomAction(symptom_name="none")
 obs, reward, done, info = env.step(action_ask)
 print(f"Intermediate reward (ask_symptom): {reward.total}")
+print(f"Data completeness: {obs.data_completeness}")
 assert 0.0 < reward.total < 1.0
 assert 0.0 < reward.accuracy_score < 1.0
 assert 0.0 < reward.cost_penalty < 1.0
+assert 0.0 < obs.data_completeness < 1.0
 
 print("All intermediate boundary checks passed!")
-print("Final confirmation: All rewards are strictly within (0, 1).")
+print("Final confirmation: All rewards and observation scores are strictly within (0, 1).")

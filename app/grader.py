@@ -35,33 +35,33 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
     """
     # --- Urgency score ---
     diff = abs(action.urgency_level - gold["urgency"])
-    urgency_score = max(0.0, 1.0 - diff * 0.4)
+    urgency_score = max(0.01, min(0.99, 1.0 - diff * 0.4))
 
     # --- Pathway score ---
-    pathway_score = 1.0 if action.care_pathway.lower() == gold["pathway"].lower() else 0.7 if (
-        action.care_pathway in ["ER", "urgent_care"] and gold["pathway"] in ["ER", "urgent_care"]) else 0.0
+    pathway_score = 0.99 if action.care_pathway.lower() == gold["pathway"].lower() else 0.7 if (
+        action.care_pathway in ["ER", "urgent_care"] and gold["pathway"] in ["ER", "urgent_care"]) else 0.01
 
     # --- Flags scoring ---
     pred = normalize_flags(action.critical_flags)
     true = normalize_flags(gold["critical_flags"])
 
     if len(pred) == 0 and len(true) == 0:
-        flags_score = 1.0
+        flags_score = 0.99
     elif len(pred) == 0:
-        flags_score = 0.0
+        flags_score = 0.01
     else:
         intersection = pred & true
         precision = len(intersection) / len(pred)
         recall = len(intersection) / len(true) if len(true) > 0 else 1.0
-        flags_score = (precision + recall) / 2
+        flags_score = max(0.01, min(0.99, (precision + recall) / 2))
 
     # Accuracy (weighted average)
     accuracy_score = 0.4 * urgency_score + 0.35 * pathway_score + 0.25 * flags_score
-    accuracy_score = max(0.01, min(0.99, accuracy_score))
+    accuracy_score = max(0.001, min(0.999, accuracy_score))
 
-    # Total score (Accuracy - Costs), clamped strictly to (0, 1)
+    # Total score (Accuracy - Costs), clamped strictly to (0.001, 0.999)
     total = accuracy_score - cost_penalty
-    total = max(0.01, min(0.99, total))
+    total = max(0.001, min(0.999, total))
 
     message = f"Accuracy: {accuracy_score:.2f} | Cost: {cost_penalty:.2f}"
     if accuracy_score > 0.8:
@@ -72,7 +72,7 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
     return TriageReward(
         total=total,
         accuracy_score=accuracy_score,
-        cost_penalty=max(0.01, cost_penalty),
+        cost_penalty=max(0.001, cost_penalty),
         done=True,
         message=message
     )

@@ -10,7 +10,7 @@ class PatientObservation(BaseModel):
     vitals: Dict[str, float | str] = Field(default_factory=dict)
     history: List[str] = Field(default_factory=list)
     available_actions: List[str] = Field(default_factory=list)
-    data_completeness: float = Field(default=0.0, ge=0.0, le=1.0)
+    data_completeness: float = Field(default=0.01, ge=0.0, le=1.0)
 
 
 class AskSymptomAction(BaseModel):
