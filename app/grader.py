@@ -72,7 +72,7 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
     return TriageReward(
         total=total,
         accuracy_score=accuracy_score,
-        cost_penalty=max(0.001, cost_penalty),
+        cost_penalty=max(0.001, min(0.999, cost_penalty)),
         done=True,
         message=message
     )
