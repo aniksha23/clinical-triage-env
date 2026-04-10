@@ -64,13 +64,13 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
     true = normalize_flags(gold["critical_flags"])
 
     if len(pred) == 0 and len(true) == 0:
-        flags_score = 0.99
+        flags_score = 0.995
     elif len(pred) == 0:
-        flags_score = 0.01
+        flags_score = 0.005
     else:
         intersection = pred & true
         precision = len(intersection) / len(pred)
-        recall = len(intersection) / len(true) if len(true) > 0 else 1.0
+        recall = len(intersection) / len(true) if len(true) > 0 else 0.995
         flags_score = max(0.005, min(0.995, (precision + recall) / 2))
 
     # Accuracy (weighted average)

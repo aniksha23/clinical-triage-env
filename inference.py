@@ -49,7 +49,7 @@ Step History:
 Available Actions (choose exactly one):
 - {{"action_type": "ask_symptom", "symptom_name": "<any clinically relevant symptom you want to probe>"}} (Cost: 0.05)
 - {{"action_type": "order_test", "test_name": "<one of: {unrevealed_tests}>"}} (Cost: 0.10)
-- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<flags>"], "confidence": 0.0-1.0}}
+- {{"action_type": "triage", "urgency_level": 1-5, "care_pathway": "ER/urgent_care/GP/self_care", "critical_flags": ["<flags>"], "confidence": 0.01-0.99}}
 
 Rules:
 - For ask_symptom: choose symptoms based on clinical reasoning — you are NOT given a list, use your medical knowledge

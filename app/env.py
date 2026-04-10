@@ -92,7 +92,7 @@ class ClinicalTriageEnv:
         total_fields = len(c["symptoms"]) + len(c["vitals"])
         revealed_fields = len(self.revealed_symptoms) + len(self.revealed_vitals)
         # Clamp away from 0.0 and 1.0 so it's always strictly in (0, 1)
-        completeness = max(0.01, min(0.99, revealed_fields / total_fields)) if total_fields > 0 else 0.01
+        completeness = max(0.005, min(0.995, revealed_fields / total_fields)) if total_fields > 0 else 0.005
         return PatientObservation(
             patient_id=c["id"],
             age=c["age"],
