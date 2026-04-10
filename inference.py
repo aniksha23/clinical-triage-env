@@ -155,5 +155,11 @@ for task_id in tasks:
                 env.close()
             rewards_str = ",".join(f"{r:.3f}" for r in step_rewards)
             success_val = 0.995 if (reward is not None and reward > 0 and done) else 0.005
+            
+            # Print detailed breakdown on its own line to avoid breaking validator parsing in [END]
+            if reward is not None and isinstance(info, dict) and "detailed_reward" in info:
+                dg = info['detailed_reward']
+                print(f"[INFO] task={task_id} accuracy={dg.get('accuracy_score', 0):.4f} decay={dg.get('message', '').split('Decay: ')[1].split(' ')[0] if 'Decay: ' in dg.get('message', '') else '1.00'}", flush=True)
+                
             print(f"[END] task={task_id} success={success_val:.3f} steps={step_count} score={final_score:.3f} rewards={rewards_str}", flush=True)
             cases_in_task += 1

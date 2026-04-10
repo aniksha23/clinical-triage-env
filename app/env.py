@@ -14,6 +14,7 @@ class ClinicalTriageEnv:
         self.revealed_vitals = {}
         self.cumulative_cost = 0.0
         self.is_done = False
+        self.step_id = 0
 
     def reset(self, task_id: str, case_id: str = None) -> PatientObservation:
         case_ids = TASKS.get(task_id, [])
@@ -33,6 +34,7 @@ class ClinicalTriageEnv:
         self.revealed_vitals = {}
         self.cumulative_cost = 0.0
         self.is_done = False
+        self.step_id = 0
         
         # Initial reveal: Age, Complaint, and ONE random vital
         all_vitals = list(case["vitals"].keys())
@@ -44,6 +46,8 @@ class ClinicalTriageEnv:
     def step(self, action: TriageAction) -> Tuple[PatientObservation, float, bool, Dict[str, Any]]:
         if self.is_done:
             raise RuntimeError("Episode is already done. Call reset().")
+        
+        self.step_id += 1
 
         if action.action_type == "ask_symptom":
             symptom = action.symptom_name
@@ -76,7 +80,7 @@ class ClinicalTriageEnv:
             return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "triage":
-            reward = compute_reward(action, self.current_case["gold"], self.cumulative_cost)
+            reward = compute_reward(action, self.current_case["gold"], self.cumulative_cost, self.step_id)
             self.is_done = True
             return self._get_obs(), reward.total, True, {"grader_score": reward.total, "detailed_reward": reward.model_dump()}
 

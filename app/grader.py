@@ -47,9 +47,10 @@ def normalize_flags(flags):
     return normalized
 
 
-def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 0.0) -> TriageReward:
+def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 0.0, step_id: int = 0) -> TriageReward:
     """
     Computes accuracy score and subtracts cumulative step costs.
+    Also applies Time-Is-Life decay based on ground-truth urgency.
     """
     # --- Urgency score ---
     diff = abs(action.urgency_level - gold["urgency"])
@@ -77,11 +78,18 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
     accuracy_score = 0.4 * urgency_score + 0.35 * pathway_score + 0.25 * flags_score
     accuracy_score = max(0.005, min(0.995, accuracy_score))
 
-    # Total score (Accuracy - Costs), clamped strictly to (0.001, 0.999)
-    total = accuracy_score - cost_penalty
+    # --- Time-Is-Life Decay ---
+    # Level 1 (Critical): 5% per step
+    # Level 5 (Non-urgent): 0.5% per step
+    decay_rates = {1: 0.05, 2: 0.03, 3: 0.02, 4: 0.01, 5: 0.005}
+    rate = decay_rates.get(gold["urgency"], 0.02)
+    time_penalty_factor = max(0.0, 1.0 - (rate * step_id))
+    
+    # Total score (Accuracy - Costs), applied decay and clamped strictly to (0, 1)
+    total = (accuracy_score - cost_penalty) * time_penalty_factor
     total = max(0.005, min(0.995, total))
 
-    message = f"Accuracy: {accuracy_score:.4f} | Cost: {cost_penalty:.4f}"
+    message = f"Accuracy: {accuracy_score:.4f} | Decay: {time_penalty_factor:.2f}"
     if accuracy_score > 0.8:
         message += " - Excellent triage!"
     elif accuracy_score < 0.5:
