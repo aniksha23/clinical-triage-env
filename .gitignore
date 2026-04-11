@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 local_validator.py
+
+# old skeleton setup folder
+clinical_triage

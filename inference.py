@@ -14,7 +14,7 @@ from app.tasks import TASKS
 
 client = OpenAI(
     base_url=os.environ.get("API_BASE_URL"),
-    api_key=os.environ.get("API_KEY")
+    api_key=os.getenv("HF_TOKEN") or os.environ.get("API_KEY")
 )
 
 MODEL = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
