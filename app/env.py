@@ -51,6 +51,13 @@ class ClinicalTriageEnv:
 
         if action.action_type == "ask_symptom":
             symptom = action.symptom_name
+            
+            # Penalize "none" - agent should triage instead
+            if symptom.lower() == "none" or not symptom.strip():
+                self.cumulative_cost += 0.02
+                reward = TriageReward(total=0.001, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message="Invalid Symptom: 'none' (Triage if done)")
+                return self._get_obs(), reward.total, False, {"grader_score": 0.001, "detailed_reward": reward.model_dump()}
+
             priorities = self.current_case["gold"].get("priorities", {})
             priority = priorities.get(symptom, "none")
             
@@ -60,21 +67,23 @@ class ClinicalTriageEnv:
 
             # Duplicate ask: still charge cost, but no info gain
             if symptom in self.revealed_symptoms:
-                self.cumulative_cost += 0.05
-                reward = TriageReward(total=0.001, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Duplicate Ask: {symptom}")
-                return self._get_obs(), reward.total, False, {"grader_score": 0.001, "detailed_reward": reward.model_dump()}
+                self.cumulative_cost += 0.04
+                self.last_error = f"REPETITION ERROR: You already asked about '{symptom}'."
+                reward = TriageReward(total=0.005, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=self.last_error)
+                return self._get_obs(), reward.total, False, {"grader_score": 0.001, "detailed_reward": reward.model_dump(), "error": self.last_error}
 
             if symptom in self.current_case["symptoms"]:
                 self.revealed_symptoms[symptom] = True
             else:
                 self.revealed_symptoms[symptom] = False
+            self.last_error = None
 
-            self.cumulative_cost += 0.05
+            self.cumulative_cost += 0.02
             reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Asked: {symptom} (Priority: {priority})")
             return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "order_test":
-            test = action.test_name
+            test = action.test_name.strip().lower()
             priorities = self.current_case["gold"].get("priorities", {})
             priority = priorities.get(test, "none")
             
@@ -82,16 +91,26 @@ class ClinicalTriageEnv:
             priority_map = {"high": 0.01, "medium": 0.005, "low": 0.002, "none": 0.001}
             step_reward = priority_map.get(priority, 0.001)
 
+            # --- Duplicate Test Detection (Case-Insensitive) ---
+            revealed_lower = {k.lower() for k in self.revealed_vitals.keys()}
+            if test in revealed_lower:
+                self.cumulative_cost += 0.08
+                self.last_error = f"REPETITION ERROR: Result for '{test}' is already visible in Vitals. Do NOT repeat tests."
+                reward = TriageReward(total=0.005, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=self.last_error)
+                return self._get_obs(), reward.total, False, {"grader_score": 0.001, "detailed_reward": reward.model_dump(), "error": self.last_error}
+
             if test in self.current_case["vitals"]:
                 self.revealed_vitals[test] = self.current_case["vitals"][test]
+            self.last_error = None
 
-            self.cumulative_cost += 0.1
+            self.cumulative_cost += 0.04
             reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Ordered: {test} (Priority: {priority})")
             return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "triage":
             reward = compute_reward(action, self.current_case["gold"], self.cumulative_cost, self.step_id)
             self.is_done = True
+            self.last_error = None
             return self._get_obs(), reward.total, True, {"grader_score": reward.total, "detailed_reward": reward.model_dump()}
 
         else:
@@ -105,12 +124,17 @@ class ClinicalTriageEnv:
         c = self.current_case
         total_fields = len(c["symptoms"]) + len(c["vitals"])
         revealed_fields = len(self.revealed_symptoms) + len(self.revealed_vitals)
-        # Clamp away from 0.0 and 1.0 so it's always strictly in (0, 1)
         completeness = max(0.005, min(0.995, revealed_fields / total_fields)) if total_fields > 0 else 0.005
+        
+        # Add feedback about last error if it exists
+        complaint = c["presenting_complaint"]
+        if getattr(self, "last_error", None):
+            complaint += f" | NOTE: {self.last_error}"
+
         return PatientObservation(
             patient_id=c["id"],
             age=c["age"],
-            presenting_complaint=c["presenting_complaint"],
+            presenting_complaint=complaint,
             symptoms=self.revealed_symptoms,
             vitals=self.revealed_vitals,
             history=c["history"],

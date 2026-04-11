@@ -56,9 +56,10 @@ Rules:
 - For order_test: you MUST use one of the exact test names listed above
 - Urgency: 1=Critical, 2=Emergency, 3=Urgent, 4=Semi-urgent, 5=Non-urgent
 - critical_flags examples: "chest_pain", "low_bp", "low_spo2", "tachycardia", "fever", "confusion"
-- Stop gathering info and triage once you have enough to decide confidently
-
-Output ONLY valid JSON, nothing else.
+- Efficiency is critical. Every step causes the patient to deteriorate and reduces your score.
+- Stop gathering info and triage once you have enough to decide.
+- Do NOT repeat questions or tests. Never send "none" as a symptom.
+- Output ONLY valid JSON, nothing else.
 """
     try:
         import time
@@ -141,14 +142,20 @@ for task_id in tasks:
                 error_str = last_error if last_error else "null"
                 done_str = "true" if done else "false"
 
+                if info and info.get('message'):
+                    print(f"[DEBUG] step={step_count} msg='{info.get('message')}'", flush=True)
+                
                 print(f"[STEP] step={step_count} action={action_str} reward={r:.3f} done={done_str} error={error_str}", flush=True)
 
                 history.append({"step": step_count, "action": action.model_dump(), "reward": r})
 
         except Exception as e:
             last_error = str(e)
-            final_score = 0.005  # floor so crashed task never emits score=0.000
-            print(f"[DEBUG] Task {task_id} error: {e}", file=sys.stderr, flush=True)
+            final_score = 0.005
+            print(f"[DEBUG] Case failed: {e}", file=sys.stderr, flush=True)
+            # Re-raise if it's a KeyboardInterrupt
+            if isinstance(e, KeyboardInterrupt):
+                raise e
 
         finally:
             if hasattr(env, 'close'):
