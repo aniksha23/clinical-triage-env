@@ -13,6 +13,7 @@ COPY app/ ./app/
 COPY server/ ./server/
 COPY inference.py .
 COPY openenv.yaml .
+COPY main.py .
 
 EXPOSE 7860
 CMD ["python", "main.py"]
