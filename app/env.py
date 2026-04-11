@@ -51,13 +51,18 @@ class ClinicalTriageEnv:
 
         if action.action_type == "ask_symptom":
             symptom = action.symptom_name
+            priorities = self.current_case["gold"].get("priorities", {})
+            priority = priorities.get(symptom, "none")
+            
+            # Map priority to reward
+            priority_map = {"high": 0.01, "medium": 0.005, "low": 0.002, "none": 0.001}
+            step_reward = priority_map.get(priority, 0.001)
 
             # Duplicate ask: still charge cost, but no info gain
             if symptom in self.revealed_symptoms:
                 self.cumulative_cost += 0.05
-                step_reward = 0.001
-                reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Already asked about {symptom}")
-                return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
+                reward = TriageReward(total=0.001, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Duplicate Ask: {symptom}")
+                return self._get_obs(), reward.total, False, {"grader_score": 0.001, "detailed_reward": reward.model_dump()}
 
             if symptom in self.current_case["symptoms"]:
                 self.revealed_symptoms[symptom] = True
@@ -65,18 +70,23 @@ class ClinicalTriageEnv:
                 self.revealed_symptoms[symptom] = False
 
             self.cumulative_cost += 0.05
-            step_reward = 0.002 if symptom in self.current_case["symptoms"] else 0.001
-            reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Asked about {symptom}")
+            reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Asked: {symptom} (Priority: {priority})")
             return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "order_test":
             test = action.test_name
+            priorities = self.current_case["gold"].get("priorities", {})
+            priority = priorities.get(test, "none")
+            
+            # Map priority to reward
+            priority_map = {"high": 0.01, "medium": 0.005, "low": 0.002, "none": 0.001}
+            step_reward = priority_map.get(priority, 0.001)
+
             if test in self.current_case["vitals"]:
                 self.revealed_vitals[test] = self.current_case["vitals"][test]
 
             self.cumulative_cost += 0.1
-            step_reward = 0.003 if test in self.current_case["vitals"] else 0.001
-            reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Ordered test: {test}")
+            reward = TriageReward(total=step_reward, accuracy_score=0.005, cost_penalty=max(0.005, min(0.995, self.cumulative_cost)), done=False, message=f"Ordered: {test} (Priority: {priority})")
             return self._get_obs(), reward.total, False, {"grader_score": step_reward, "detailed_reward": reward.model_dump()}
 
         elif action.action_type == "triage":
