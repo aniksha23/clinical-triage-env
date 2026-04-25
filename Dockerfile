@@ -16,4 +16,4 @@ COPY openenv.yaml .
 COPY main.py .
 
 EXPOSE 7860
-CMD ["python", "main.py"]
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
