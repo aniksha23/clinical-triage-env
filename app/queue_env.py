@@ -19,6 +19,7 @@ class ClinicalQueueEnv:
         self.global_step_id = 0
         self.patient_states: Dict[str, Dict[str, Any]] = {}
         self.is_done = False
+        self.triage_decisions: Dict[str, Dict] = {}
 
     def reset(self) -> QueueObservation:
         self.global_step_id = 0
@@ -26,6 +27,7 @@ class ClinicalQueueEnv:
         self.patients = {}
         self.patient_scenarios = {}
         self.patient_states = {}
+        self.triage_decisions = {}
         
         selected_scenarios = random.sample(SCENARIOS, min(self.num_patients, len(SCENARIOS)))
         for i, data in enumerate(selected_scenarios):
@@ -66,6 +68,54 @@ class ClinicalQueueEnv:
             self.is_done = True
             info["msg"] = f"Queue Submitted. Accuracy: {reward:.4f}"
             return self._get_obs(), reward, True, info
+
+        # 2.5 INDIVIDUAL TRIAGE ACTION
+        elif action.action_type == "triage" and self.active_patient_id:
+            p_id = self.active_patient_id
+            
+            # Record decision
+            self.triage_decisions[p_id] = {
+                "urgency_level": action.urgency_level,
+                "care_pathway": action.care_pathway,
+                "critical_flags": action.critical_flags,
+                "reasoning": getattr(action, "reasoning", "")
+            }
+            
+            # Compute partial reward
+            gold_urgency = self.patient_scenarios[p_id]["gold"]["urgency"]
+            diff = abs(action.urgency_level - gold_urgency)
+            if diff == 0:
+                reward += 0.5
+            elif diff == 1:
+                reward += 0.2
+            else:
+                reward -= 0.5
+                
+            info["msg"] = f"Triaged {p_id} as Level {action.urgency_level}. Diff: {diff}"
+            
+            # Switch to next untriaged patient
+            untriaged = [pid for pid in self.patients.keys() if pid not in self.triage_decisions]
+            if untriaged:
+                self.active_patient_id = untriaged[0]
+            else:
+                # All patients triaged! Auto-submit queue based on decisions
+                from app.models import TriageQueueAction, TriageQueueItem
+                queue_items = []
+                for pid, dec in self.triage_decisions.items():
+                    queue_items.append(TriageQueueItem(
+                        patient_id=pid,
+                        assigned_urgency=dec["urgency_level"],
+                        reasoning=dec["reasoning"]
+                    ))
+                # Sort by urgency_level ascending (1 is most critical)
+                queue_items.sort(key=lambda x: x.assigned_urgency)
+                
+                final_action = TriageQueueAction(queue=queue_items)
+                final_reward = compute_queue_reward(final_action, self.patient_scenarios)
+                reward += final_reward
+                self.is_done = True
+                info["msg"] = f"All patients triaged. Auto-submitted Queue. Final ranking reward: {final_reward:.4f}"
+                return self._get_obs(), reward, True, info
 
         # 3. INTERVIEW ACTIVE PATIENT
         elif self.active_patient_id:

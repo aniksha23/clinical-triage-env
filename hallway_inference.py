@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 MODEL = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 client = OpenAI(api_key=API_KEY, base_url="https://api.groq.com/openai/v1")
 
