@@ -64,6 +64,8 @@ def step(req: StepRequest):
 
     # Fallback to active patient if not specified
     target_patient = req.patient_id or env.active_patient_id
+    if target_patient and hasattr(env, "patients") and target_patient in env.patients:
+        env.active_patient_id = target_patient
 
     try:
         if req.action_type == "ask_symptom":
@@ -88,9 +90,16 @@ def step(req: StepRequest):
             raise HTTPException(status_code=400, detail=f"Unknown action_type: {req.action_type}")
 
         obs, reward, done, info = env.step(action)
+        
+        # RL frameworks expect a dict with a "total" key for rewards
+        if isinstance(reward, (float, int)):
+            reward_data = {"total": float(reward)}
+        else:
+            reward_data = reward.model_dump() if hasattr(reward, "model_dump") else reward
+            
         return {
             "observation": obs.model_dump() if hasattr(obs, "model_dump") else obs,
-            "reward": reward.model_dump() if hasattr(reward, "model_dump") else reward,
+            "reward": reward_data,
             "done": done,
             "info": info,
         }

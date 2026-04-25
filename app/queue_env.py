@@ -48,7 +48,7 @@ class ClinicalQueueEnv:
                 "revealed_vitals": {},
                 "cumulative_cost": 0.0
             }
-        self.active_patient_id = None
+        self.active_patient_id = "P1" if self.patients else None
         return self._get_obs()
 
     def step(self, action: TriageAction) -> Tuple[QueueObservation, float, bool, Dict[str, Any]]:
