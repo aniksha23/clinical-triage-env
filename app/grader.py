@@ -8,6 +8,8 @@ CANONICAL_FLAGS = {
     "fever", "cough", "sore_throat", "lethargy", "neck_stiffness",
     "abdominal_pain", "dizziness", "rash", "numbness", "dehydration",
     "vomiting", "palpitations", "fatigue", "headache", "back_pain",
+    "st_elevation", "diaphoresis", "suicidal_ideation", "hopelessness",
+    "high_risk", "appendicitis", "right_lower_quadrant_pain"
 }
 
 ALIASES = {
@@ -28,7 +30,6 @@ ALIASES = {
     "sob": "shortness_of_breath",
     "dyspnea": "shortness_of_breath",
     "syncope": "weakness",
-    "diaphoresis": "chest_pain",  # context: usually accompanies chest pain
 }
 
 
@@ -76,12 +77,19 @@ def compute_reward(action: FinalTriageAction, gold: dict, cost_penalty: float = 
 
     # Accuracy (weighted average)
     accuracy_score = 0.4 * urgency_score + 0.35 * pathway_score + 0.25 * flags_score
+
+    # --- Calibration Penalty ---
+    # If confidence is fixed (0.8) but accuracy is low, penalize.
+    calibration_error = abs(accuracy_score - action.confidence)
+    if calibration_error > 0.2:
+        accuracy_score -= 0.1 * calibration_error
+    
     accuracy_score = max(0.005, min(0.995, accuracy_score))
 
-    # --- Time-Is-Life Decay ---
-    # Level 1 (Critical): 5% per step
+    # --- Hyper-Aggressive Time-Is-Life Decay ---
+    # Level 1 (Critical): 10% per step - if you spend 10 steps, the patient is gone.
     # Level 5 (Non-urgent): 0.5% per step
-    decay_rates = {1: 0.05, 2: 0.03, 3: 0.02, 4: 0.01, 5: 0.005}
+    decay_rates = {1: 0.10, 2: 0.05, 3: 0.03, 4: 0.01, 5: 0.005}
     rate = decay_rates.get(gold["urgency"], 0.02)
     time_penalty_factor = max(0.0, 1.0 - (rate * step_id))
     
