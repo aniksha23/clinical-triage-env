@@ -55,10 +55,10 @@ Rules:
 - For ask_symptom: choose symptoms based on clinical reasoning — you are NOT given a list, use your medical knowledge
 - For order_test: you MUST use one of the exact test names listed above
 - Urgency: 1=Critical, 2=Emergency, 3=Urgent, 4=Semi-urgent, 5=Non-urgent
-- critical_flags examples: "chest_pain", "low_bp", "low_spo2", "tachycardia", "fever", "confusion"
-- Efficiency is critical. Every step causes the patient to deteriorate and reduces your score.
-- Stop gathering info and triage once you have enough to decide.
-- Do NOT repeat questions or tests. Never send "none" as a symptom.
+- EFFICIENCY WARNING: Every step causes the patient to deteriorate (up to 10% decay per step for critical cases).
+- REPETITION WARNING: Repeating a question or category triggers a massive cost penalty.
+- CALIBRATION WARNING: Your 'confidence' must match your actual accuracy or you will be penalized.
+- Only perform a screening (e.g., 'suicidal_ideation_screening') if clinical evidence suggests it.
 - Output ONLY valid JSON, nothing else.
 """
     try:
@@ -129,7 +129,7 @@ for task_id in tasks:
                 try:
                     obs, reward, done, info = env.step(action)
                     last_error = info.get("error", None) if info else None
-                    r = max(0.005, min(0.995, reward))
+                    r = max(-1.0, min(1.0, reward))
                     if done:
                         final_score = r
                 except Exception as e:

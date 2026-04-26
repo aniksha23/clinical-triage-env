@@ -3,18 +3,17 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import uuid
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app.env import ClinicalTriageEnv
-from app.models import AskSymptomAction, OrderTestAction, FinalTriageAction
-from app.tasks import TASKS
+from app.queue_env import ClinicalQueueEnv
+from app.models import AskSymptomAction, OrderTestAction, FinalTriageAction, TriageQueueAction, TriageQueueItem
 
-app = FastAPI(title="Clinical Triage Env")
+app = FastAPI(title="Clinical Queue Env")
 
-# One env instance per session — prevents concurrent requests from corrupting each other
-sessions: Dict[str, ClinicalTriageEnv] = {}
+# One env instance per session
+sessions: Dict[str, ClinicalQueueEnv] = {}
 
 
 class ResetRequest(BaseModel):
@@ -26,6 +25,7 @@ class ResetRequest(BaseModel):
 class StepRequest(BaseModel):
     session_id: Optional[str] = None  # if omitted, uses most-recently-reset session
     action_type: str
+    patient_id: Optional[str] = None
     symptom_name: Optional[str] = None
     test_name: Optional[str] = None
     urgency_level: Optional[int] = None
@@ -33,9 +33,10 @@ class StepRequest(BaseModel):
     critical_flags: list = Field(default_factory=list)
     confidence: Optional[float] = None
     reasoning: Optional[str] = None
+    queue: Optional[List[Dict[str, Any]]] = None
 
 
-# Fallback for callers that don't send a session_id (e.g. simple test scripts)
+# Fallback for callers that don't send a session_id
 _last_session_id: str = ""
 
 
@@ -43,13 +44,12 @@ _last_session_id: str = ""
 def reset(req: ResetRequest = ResetRequest()):
     global _last_session_id
     session_id = req.session_id or str(uuid.uuid4())
-    task_id = req.episode_id if req.episode_id in TASKS else "easy_triage"
 
-    env = ClinicalTriageEnv()
+    env = ClinicalQueueEnv()
     sessions[session_id] = env
     _last_session_id = session_id
 
-    obs = env.reset(task_id)
+    obs = env.reset()
     result = obs.model_dump()
     result["session_id"] = session_id  # return it so the caller can use it in /step
     return result
@@ -62,11 +62,16 @@ def step(req: StepRequest):
     if env is None:
         raise HTTPException(status_code=400, detail=f"Unknown session_id '{session_id}'. Call /reset first.")
 
+    # Fallback to active patient if not specified
+    target_patient = req.patient_id or env.active_patient_id
+    if target_patient and hasattr(env, "patients") and target_patient in env.patients:
+        env.active_patient_id = target_patient
+
     try:
         if req.action_type == "ask_symptom":
-            action = AskSymptomAction(symptom_name=req.symptom_name or "none")
+            action = AskSymptomAction(patient_id=target_patient, symptom_name=req.symptom_name or "none")
         elif req.action_type == "order_test":
-            action = OrderTestAction(test_name=req.test_name or "none")
+            action = OrderTestAction(patient_id=target_patient, test_name=req.test_name or "none")
         elif req.action_type == "triage":
             action = FinalTriageAction(
                 urgency_level=req.urgency_level or 3,
@@ -75,13 +80,26 @@ def step(req: StepRequest):
                 confidence=req.confidence or 0.5,
                 reasoning=req.reasoning,
             )
+        elif req.action_type == "submit_triage_queue":
+            queue_items = []
+            if req.queue:
+                for item in req.queue:
+                    queue_items.append(TriageQueueItem(**item))
+            action = TriageQueueAction(queue=queue_items)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action_type: {req.action_type}")
 
         obs, reward, done, info = env.step(action)
+        
+        # RL frameworks expect a dict with a "total" key for rewards
+        if isinstance(reward, (float, int)):
+            reward_data = {"total": float(reward)}
+        else:
+            reward_data = reward.model_dump() if hasattr(reward, "model_dump") else reward
+            
         return {
-            "observation": obs.model_dump(),
-            "reward": reward.model_dump() if hasattr(reward, "model_dump") else reward,
+            "observation": obs.model_dump() if hasattr(obs, "model_dump") else obs,
+            "reward": reward_data,
             "done": done,
             "info": info,
         }
@@ -95,7 +113,9 @@ def state(session_id: Optional[str] = None):
     env = sessions.get(sid)
     if env is None:
         return {}
-    return env.state() or {}
+    if hasattr(env, "state"):
+        return env.state() or {}
+    return env._get_obs().model_dump()
 
 
 @app.get("/health")

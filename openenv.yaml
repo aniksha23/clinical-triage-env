@@ -1,10 +1,10 @@
-name: clinical-triage-env
-version: "1.0.0"
-description: AI clinical triage simulation
+name: "clinical-triage-benchmark"
+version: "2.0.0"
+description: "A POMDP clinical triage environment evaluating long-horizon reasoning, active state-space discovery, and asymmetric risk management under uncertainty."
 
-entrypoint: app.env:ClinicalTriageEnv
+entrypoint: app.queue_env:ClinicalQueueEnv
 
-observation_model: app.models:PatientObservation
+observation_model: app.models:QueueObservation
 action_model: app.models:TriageAction
 reward_model: app.models:TriageReward
 
