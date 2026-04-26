@@ -1,122 +1,109 @@
 ---
-title: Clinical Triage Env
+title: Clinical Triage Env v2
 emoji: 🏥
-colorFrom: red
-colorTo: blue
+colorFrom: blue
+colorTo: indigo
 sdk: docker
-app_port: 7860
-tags:
-  - openenv
-  - reinforcement-learning
-  - clinical
-  - triage
 pinned: false
 ---
 
-# Clinical Triage Environment
+# 🏥 Clinical Triage Agent: RL-Optimized Patient Prioritization
+**Built for the Meta PyTorch OpenEnv Hackathon x SST**
 
-An AI agent environment simulating emergency department triage. The agent must gather patient information and assign the correct urgency level and care pathway — mimicking decisions made by real triage nurses.
+[![Model on HF](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-blue)](https://huggingface.co/sreeya14/clinical-triage-agent-v2-60step)
+[![Space on HF](https://img.shields.io/badge/🤗%20Hugging%20Face-Live%20Env-green)](https://huggingface.co/spaces/sreeya14/clinical-v2)
+[![Tech Stack](https://img.shields.io/badge/Tech-PyTorch%20%7C%20Unsloth%20%7C%20FastAPI%20%7C%20TRL-red)]()
 
-## Observation Space
+## ⚡ TL;DR
+An OpenEnv-compatible Reinforcement Learning environment that teaches LLM agents clinical triage as an information-gathering problem with multi-patient queue orchestration. Agents must probe patients to surface hidden risks—including suicidal ideation in patients who do not volunteer it—and rank them in priority order under time pressure. Reviewed by a psychiatry professor at NIMHANS.
 
-| Field | Type | Description |
+## 📊 End-to-End RL Training Results
+![End-to-End RL Training](res1.png) 
+> *Random vs. Heuristic vs. GRPO-trained agent on a multi-patient triage queue over 60 steps.*
+
+---
+
+## 🧠 Why This Matters
+Most clinical AI projects frame triage as simple classification: input symptoms, output an urgency level. **Real triage is harder.** Patients minimize, deflect, or present with somatic complaints that hide the actual risk. 
+
+The hardest cases are the ones that don't look critical on the surface—like a 24-year-old presenting with "feeling down" who is actively planning suicide. Surface-level classifiers miss these entirely. Real Emergency Department nurses don't miss them because they probe. **Our environment trains LLM agents to do the same.**
+
+### Hackathon Theme Fit
+* **Primary:** Theme #3.1 — Professional Tasks (World modeling under partial observability).
+* **Secondary:** Theme #2 — Long-Horizon Planning (Multi-step probing → individual triage → holistic queue ranking).
+
+---
+
+## 🏗️ Environment Design
+* **Architecture (POMDP):** Each scenario has a visible presenting complaint and a hidden clinical truth. The agent reveals the truth only by asking the right probe categories (e.g., `pain_characterization`, `suicidal_ideation_screening`)—mirroring a real clinical interview.
+* **Multi-Patient Orchestration:** Episodes consist of a queue of 3 patients. The agent investigates and triages each, followed by an auto-submitted sorted ranking. Inversion penalties fire if a Level-1 critical patient is ranked behind a Level-4 patient, modeling the real-world clinical cost of delaying urgent care.
+* **Discovery-Weighted Rewards:** Each probe earns an information-gain reward proportional to its clinical utility (e.g., ECG for chest pain = +0.20). Asking irrelevant symptoms nets +0.0 (incurring only the time penalty).
+* **Asymmetric Clinical Cost:** Under-triage by 2+ levels results in a severe -0.5 penalty per patient, reflecting the reality that missing a myocardial infarction is categorically worse than over-admitting an ankle sprain.
+
+### Reward Structure
+| Component | Value | Rationale |
 |---|---|---|
-| `patient_id` | str | Case identifier |
-| `age` | int | Patient age |
-| `presenting_complaint` | str | Chief complaint |
-| `symptoms` | Dict[str, bool] | Revealed symptoms |
-| `vitals` | Dict[str, float\|str] | Revealed vital signs |
-| `history` | List[str] | Medical history |
-| `available_actions` | List[str] | Actions available this step |
-| `data_completeness` | float | Fraction of data revealed (0–1) |
+| Per-step time penalty | `-0.01` | Simulates clinical time pressure. |
+| Probe (relevant category) | `+0.05` to `+0.30` | Discovery-weighted by clinical utility. |
+| Probe (irrelevant) | `0.00` | No value, just time cost. |
+| Per-patient triage (correct level) | `+0.50` | Rewards accuracy. |
+| Per-patient triage (off by 1) | `+0.20` | Partial credit for close calls. |
+| Per-patient triage (off by 2+) | `-0.50` | Asymmetric penalty—under-triage hurts. |
+| Auto-submit queue ranking | Up to `+1.00` | Rewards correct systemic prioritization. |
+| Junk action (empty/invalid) | `-0.10` | Burns out gaming attempts and hallucinations. |
 
-## Action Space
+---
 
-| Action | Fields | Cost |
+## 📋 Clinical Scenarios
+Scenarios were reviewed and refined with input from a psychiatry professor at NIMHANS (National Institute of Mental Health and Neurosciences).
+
+| ID | Case | Hidden Risk | Gold ESI | Probe Required |
+|---|---|---|---|---|
+| `case_cardiac_001` | 58M, "chest heaviness" | Anterior MI (ST elevation) | 1 | `pain_characterization` → `ECG` |
+| `case_mental_001` | 24F, "feeling down" | **Active suicidal ideation** | 1 | `mental_status` → `suicidal_ideation_screening` |
+| `case_abdominal_001` | 35M, "stomach hurts" | Appendicitis | 2 | `pain_characterization` → `physical_exam` |
+| `case_stroke_001` | 68F, "feels weird" | Stroke (FAST positive) | 1 | `neuro_exam` |
+| `case_low_acuity_001` | 25M, ankle sprain | None | 4-5 | minimal probing |
+| `case_sepsis_001` | 70F, confusion | Sepsis | 1-2 | `vitals` + `WBC` |
+
+---
+
+## ⚙️ Training Methodology
+* **Base Model:** `Llama-3.2-3B-Instruct` (4-bit quantized via Unsloth)
+* **LoRA Configuration:** r=16, target modules: q, k, v, o, gate, up, down projections
+* **Algorithm:** GRPO via TRL
+* **Reward Attribution:** Episode-based attribution (model's first action + heuristic completion)
+* **Compute:** T4 / A10G (Hugging Face Spaces)
+* **Training Time:** ~50 min total across 120 steps (60 single-step SFT warmup, 60 episode-based GRPO)
+
+### Evaluation Results
+| Agent | Mean Episode Reward | Std Dev |
 |---|---|---|
-| `ask_symptom` | `symptom_name: str` | −0.05 |
-| `order_test` | `test_name: str` | −0.10 |
-| `triage` | `urgency_level: 1–5`, `care_pathway: ER/urgent_care/GP/self_care`, `critical_flags: List[str]`, `confidence: float` | final step |
+| **Random** | `[Insert]` | `[Insert]` |
+| **Heuristic (Rule-Based)** | `[Insert]` | `[Insert]` |
+| **Trained (GRPO)** | `[Insert]` | `[Insert]` |
 
-## Reward
+*(Add a brief 1-2 sentence interpretation of your results here once the numbers are in).*
 
-All scores are strictly in **(0, 1)** — never exactly 0 or 1.
+---
 
-**Intermediate steps:**
+## 🔍 Behavior Comparison (The Suicidal Ideation Case)
+This trajectory demonstrates how training fundamentally shifts the model from surface-level guessing to active clinical investigation.
 
-| Action | Reward |
-|---|---|
-| Ask about a relevant symptom | +0.10 |
-| Ask about an irrelevant symptom | +0.02 |
-| Order a test present in vitals | +0.15 |
-| Order an unknown test | +0.02 |
+```text
+PATIENT P2: 24F, "feeling really down lately"
+HIDDEN: Active suicidal ideation, plan with means
 
-**Final triage score** = `accuracy_score − cost_penalty`, clamped to (0.01, 0.99):
-
-- **Urgency accuracy** (40%) — `1.0 − 0.4 × |predicted − gold|`
-- **Care pathway** (35%) — exact match = 1.0; ER ↔ urgent_care = 0.7; otherwise 0.0
-- **Critical flags** (25%) — mean of precision and recall vs gold flags
-- **Cost penalty** — cumulative action costs (0.05 per symptom ask, 0.10 per test)
-
-## Tasks
-
-| Task | Cases | Difficulty | Description |
-|---|---|---|---|
-| `easy_triage` | 3 | Easy | Clear-cut presentations, complete data |
-| `medium_triage` | 3 | Medium | Partial data, requires 1–2 information steps |
-| `hard_triage` | 9 | Hard | Incomplete data, ambiguous presentations |
-
-## Baseline Performance
-
-| Task | Avg Reward | Avg Steps | Model |
-|---|---|---|---|
-| easy_triage | ~0.85 | 1–2 | llama-3.1-8b-instant |
-| medium_triage | ~0.70 | 2–3 | llama-3.1-8b-instant |
-| hard_triage | ~0.65 | 2–3 | llama-3.1-8b-instant |
-
-## Setup
-
-```bash
-# Local
-pip install -r requirements.txt
-cp .env.example .env   # set API_KEY, API_BASE_URL, MODEL_NAME
-python inference.py
-
-# Docker
-docker build -t clinical-triage-env .
-docker run --rm -e API_KEY=... -e API_BASE_URL=... -e MODEL_NAME=... clinical-triage-env
-```
-
-The Docker image runs a FastAPI server on port 7860 (`/reset`, `/step`, `/state`, `/health`) using only the slim deps in `requirements-inference.txt`.
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `API_KEY` | Yes | API key for the LLM provider (e.g. Groq) |
-| `API_BASE_URL` | Yes | OpenAI-compatible base URL (e.g. `https://api.groq.com/openai/v1`) |
-| `MODEL_NAME` | No | Model identifier (default: `llama-3.1-8b-instant`) |
-| `MAX_CASES` | No | Max cases to run per `inference.py` invocation (default: 5) |
-
-## OpenEnv Interface
-
-```python
-from app.env import ClinicalTriageEnv
-
-env = ClinicalTriageEnv()
-obs = env.reset("easy_triage")              # PatientObservation
-obs = env.reset("easy_triage", case_id="e1")  # pin to specific case
-obs, reward, done, info = env.step(action)  # TriageReward
-state = env.state()                         # full ground truth (gold labels)
-```
-
-## Output Format
-
-`inference.py` emits structured log lines consumed by the OpenEnv validator:
-
-```
-[START] task=easy_triage env=clinical-triage-env model=llama-3.1-8b-instant
-[STEP]  step=1 action={...} reward=0.100 done=false error=null
-[STEP]  step=2 action={...} reward=0.650 done=true  error=null
-[END]   task=easy_triage success=true steps=2 score=0.650 rewards=0.100,0.650
-```
+UNTRAINED AGENT                          │    TRAINED / HEURISTIC AGENT
+─────────────────────────────────────────┼──────────────────────────────────────────────
+1. ask_symptom(headache)                 │    1. ask_symptom(mental_status_screening)
+   → "I'm not sure"                      │       → "Flat affect, hopelessness"
+   reward: -0.01                         │       reward: +0.15
+                                         │
+2. ask_symptom(fever)                    │    2. ask_symptom(suicidal_ideation_screening)
+   → "I'm not sure"                      │       → "Thinking about pills tonight"
+   reward: -0.01                         │       reward: +0.30
+                                         │
+3. triage(level=4, GP)                   │    3. triage(level=1, ER, [suicide_risk])
+   ❌ MISSED RISK                        │       ✓ RISK CAUGHT
+   episode reward: -0.50                 │       episode reward: +1.50
