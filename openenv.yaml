@@ -10,25 +10,25 @@ reward_model: app.models:TriageReward
 
 tasks:
   - id: easy_triage
-    description: Clear-cut presentations with complete patient data
+    description: Clear-cut presentations with multiple hallway patients
     difficulty: easy
     grader:
       type: programmatic
-      module: app.grader
-      function: compute_reward
+      module: app.queue_grader
+      function: compute_queue_reward
 
   - id: medium_triage
-    description: Partial data requiring 1-2 information gathering steps
+    description: Partial data requiring 2-3 global information gathering steps
     difficulty: medium
     grader:
       type: programmatic
-      module: app.grader
-      function: compute_reward
+      module: app.queue_grader
+      function: compute_queue_reward
 
   - id: hard_triage
-    description: Incomplete data with ambiguous presentations
+    description: Ambiguous presentations across the hallway with critical risks
     difficulty: hard
     grader:
       type: programmatic
-      module: app.grader
-      function: compute_reward
+      module: app.queue_grader
+      function: compute_queue_reward

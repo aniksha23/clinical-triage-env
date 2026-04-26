@@ -70,6 +70,10 @@ class ClinicalQueueEnv(Environment):
 
         # 2. SUBMIT QUEUE (Final Action)
         if action.action_type == "submit_triage_queue":
+            # --- GLOBAL SAFETY GATE ---
+            if self.global_step_id < 4:
+                return self._get_obs(), -0.1, False, {"msg": "SAFETY WARNING: Cannot submit queue before assessing hallway."}
+            
             reward = compute_queue_reward(action, self.patient_scenarios)
             self.is_done = True
             info["msg"] = f"Queue Submitted. Accuracy: {reward:.4f}"
@@ -77,6 +81,10 @@ class ClinicalQueueEnv(Environment):
 
         # 2.5 INDIVIDUAL TRIAGE ACTION
         elif action.action_type == "triage" and self.active_patient_id:
+            # --- INDIVIDUAL SAFETY GATE ---
+            if self.global_step_id < 2:
+                return self._get_obs(), -0.1, False, {"msg": "SAFETY WARNING: Probing required before triage."}
+            
             p_id = self.active_patient_id
             
             # Record decision
