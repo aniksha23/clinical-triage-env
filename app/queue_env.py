@@ -10,7 +10,13 @@ from app.models import (
 from app.patient_simulator import PatientScenario, PatientSimulator
 from app.queue_grader import compute_queue_reward
 
-class ClinicalQueueEnv:
+try:
+    from openenv import Environment
+except ImportError:
+    # Fallback if openenv is not installed locally
+    Environment = object
+
+class ClinicalQueueEnv(Environment):
     def __init__(self, num_patients: int = 4):
         self.num_patients = num_patients
         self.patients: Dict[str, PatientSimulator] = {}

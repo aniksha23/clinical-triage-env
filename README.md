@@ -23,10 +23,10 @@ An OpenEnv-compatible Reinforcement Learning environment that teaches LLM agents
 
 ---
 
-## 🧠 Why This Matters
-Most clinical AI projects frame triage as simple classification: input symptoms, output an urgency level. **Real triage is harder.** Patients minimize, deflect, or present with somatic complaints that hide the actual risk. 
+## 🧠 Why This Matters: The Credit Assignment Problem
+Most clinical AI projects treat triage as a simple open-loop text classification problem. But in the real world, patients minimize, deflect, or hide their true symptoms. Standard zero-shot LLMs collapse under this state uncertainty.
 
-The hardest cases are the ones that don't look critical on the surface—like a 24-year-old presenting with "feeling down" who is actively planning suicide. Surface-level classifiers miss these entirely. Real Emergency Department nurses don't miss them because they probe. **Our environment trains LLM agents to do the same.**
+We engineered an environment so complex that it explicitly exposes the **Credit Assignment Problem** in LLM reasoning. By structuring the ER queue as a strict **Partially Observable Markov Decision Process (POMDP)**, we demonstrate that an agent must learn an *Active Exploration Policy* rather than just guessing. Our environment provides a built-in Dense Information Gain (IG) reward matrix, making it a turnkey testbed for researchers evaluating RL algorithms (like GRPO) on long-horizon reasoning.
 
 ### Hackathon Theme Fit
 * **Primary:** Theme #3.1 — Professional Tasks (World modeling under partial observability).
@@ -35,6 +35,15 @@ The hardest cases are the ones that don't look critical on the surface—like a 
 ---
 
 ## 🏗️ Environment Design
+
+### ⚙️ Core RL Design Mechanisms
+To max out the learning signal for our GRPO training, we engineered three specific mechanisms into the environment:
+
+1. **State-Space Discovery (The POMDP Feature):** Symptoms and critical risks are explicitly hidden (`hidden_facts` in `data.py`). The agent cannot shortcut to a diagnosis; it is forced to learn an *Active Exploration Policy* to uncover the truth.
+2. **Intrinsic Information Gain (IG) Rewards:** We built a `discovery_values` dictionary into the reward function. The environment dynamically rewards the model for asking the *right* questions (e.g., yielding a massive +0.30 reward for successfully uncovering hidden suicidal ideation).
+3. **Safety-Constrained Ranking (Asymmetric Penalties):** To enforce real-world safety alignment, we implemented asymmetric penalty multipliers (`order_score *= 0.2`). Failing to place a Level-1 critical patient in the top 2 queue slots geometrically destroys the agent's episode score, forcing the model to prioritize systemic safety over individual patient completion.
+
+### 🧩 Environment Mechanics
 * **Architecture (POMDP):** Each scenario has a visible presenting complaint and a hidden clinical truth. The agent reveals the truth only by asking the right probe categories (e.g., `pain_characterization`, `suicidal_ideation_screening`)—mirroring a real clinical interview.
 * **Multi-Patient Orchestration:** Episodes consist of a queue of 3 patients. The agent investigates and triages each, followed by an auto-submitted sorted ranking. Inversion penalties fire if a Level-1 critical patient is ranked behind a Level-4 patient, modeling the real-world clinical cost of delaying urgent care.
 * **Discovery-Weighted Rewards:** Each probe earns an information-gain reward proportional to its clinical utility (e.g., ECG for chest pain = +0.20). Asking irrelevant symptoms nets +0.0 (incurring only the time penalty).
