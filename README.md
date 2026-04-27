@@ -15,7 +15,8 @@ pinned: false
 *   **[🤗 Model Weights (GRPO-Trained)](https://huggingface.co/sreeya14/clinical-v2-60step)**
 *   **[📺 Pitch Demo](https://youtu.be/E6w6n0criY8)**
 
-
+### Hackathon Theme Fit
+* Theme #3.1 — Professional Tasks (World modeling under partial observability, resisting shortcuts).
 ---
 
 ## 1. The Problem: The Clinical "Shortcut" Trap
