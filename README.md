@@ -12,7 +12,7 @@ pinned: false
 
 ### ⚡ Quick Links
 *   **[🤗 Live Hugging Face Space](https://huggingface.co/spaces/sreeya14/clinical-v2)** (Try the Live Env)
-*   **[🤗 Model Weights (GRPO-Trained)](https://huggingface.co/sreeya14/clinical-v2-final)**
+*   **[🤗 Model Weights (GRPO-Trained)](https://huggingface.co/sreeya14/clinical-v2-60step)**
 *   **[📺 Pitch Demo](https://youtu.be/E6w6n0criY8)**
 
 
